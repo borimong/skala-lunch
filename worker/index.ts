@@ -2,6 +2,7 @@ import { weeklyMenuSchema } from "../shared/menu";
 import { requireAdmin, unauthorized } from "./auth";
 import { extractMenu } from "./gemini";
 import { getLatestWeek, getPublishedWeek, saveWeek } from "./menus";
+import { notifyToday } from "./slack";
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -80,6 +81,20 @@ export default {
         return Response.json({ ok: true });
       }
 
+      // 관리자: 오늘의 메뉴 슬랙 즉시 발송 (?date=YYYY-MM-DD로 특정 날짜 테스트/재발송)
+      if (pathname === "/api/notify" && method === "POST") {
+        if (!requireAdmin(request, env)) return unauthorized();
+        const date = url.searchParams.get("date") ?? undefined;
+        if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          return Response.json(
+            { error: "date는 YYYY-MM-DD 형식이어야 해요." },
+            { status: 400 },
+          );
+        }
+        const result = await notifyToday(env, date);
+        return Response.json(result);
+      }
+
       if (pathname.startsWith("/api/")) {
         return Response.json({ error: "Not found" }, { status: 404 });
       }
@@ -91,5 +106,9 @@ export default {
 
     // /api/* 외 요청은 SPA 정적 자산으로 (안전망)
     return env.ASSETS.fetch(request);
+  },
+
+  async scheduled(_controller, env, ctx): Promise<void> {
+    ctx.waitUntil(notifyToday(env));
   },
 } satisfies ExportedHandler<Env>;

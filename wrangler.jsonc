@@ -18,5 +18,9 @@
       "migrations_dir": "./migrations",
     },
   ],
-  "vars": { "GEMINI_MODEL": "gemini-3.5-flash" },
+  "vars": {
+    "GEMINI_MODEL": "gemini-3.5-flash",
+    "PUBLIC_URL": "https://skala-lunch.ewkimhyunsu11.workers.dev",
+  },
+  "triggers": { "crons": ["0 23 * * *"] },
 }
