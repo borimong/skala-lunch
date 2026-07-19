@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "skala-lunch",
+  "account_id": "1273d2c690baee6e98953b45fa6e813b",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-07-16",
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "skala-lunch",
+      "database_id": "7da6f063-ffcb-4cea-bbb8-e30b4bda3de7",
+      "migrations_dir": "./migrations",
+    },
+  ],
+  "vars": { "GEMINI_MODEL": "gemini-3.5-flash" },
+}
