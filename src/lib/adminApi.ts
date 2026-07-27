@@ -40,6 +40,16 @@ export async function extractMenuFromImage(
   return { menu: data.menu, imageKey: data.imageKey ?? "" };
 }
 
+export async function fetchPendingDrafts(): Promise<WeeklyMenu[]> {
+  const res = await fetch("/api/menus/pending", { headers: authHeader() });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? `목록을 불러오지 못했어요 (${res.status})`);
+  }
+  const data = (await res.json()) as { drafts?: WeeklyMenu[] };
+  return data.drafts ?? [];
+}
+
 export async function publishMenu(
   menu: WeeklyMenu,
   imageKey?: string,

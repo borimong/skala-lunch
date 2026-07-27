@@ -43,9 +43,17 @@ export default function AdminUploadPage() {
       <main className="mx-auto max-w-lg px-4 py-8">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-900">식단표 올리기</h1>
-          <Link to="/" className="text-sm text-gray-500 hover:text-gray-700">
-            ← 홈
-          </Link>
+          <div className="flex items-center gap-3 text-sm">
+            <Link
+              to="/admin/pending"
+              className="font-medium text-amber-700 hover:text-amber-800"
+            >
+              검토 대기
+            </Link>
+            <Link to="/" className="text-gray-500 hover:text-gray-700">
+              ← 홈
+            </Link>
+          </div>
         </div>
 
         <form onSubmit={submit} className="space-y-5">

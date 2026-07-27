@@ -52,3 +52,46 @@ export async function saveWeek(
       .run();
   }
 }
+
+// 자동 검증에서 이상이 감지된 주를 "보류(draft)"로 저장한다(관리자 검토 대기).
+// 이미 published 된 주는 절대 덮어쓰지 않는다(끝의 WHERE 가드) — 수동 발행본 보호.
+export async function saveDraft(
+  db: D1Database,
+  menu: WeeklyMenu,
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO weekly_menus (week_start, data, status, updated_at)
+       VALUES (?, ?, 'draft', datetime('now'))
+       ON CONFLICT(week_start) DO UPDATE SET
+         data = excluded.data,
+         updated_at = datetime('now')
+       WHERE weekly_menus.status = 'draft'`,
+    )
+    .bind(menu.weekStart, JSON.stringify(menu))
+    .run();
+}
+
+// 검토 대기 중인 보류 주 목록(최신 주부터).
+export async function getPendingDrafts(db: D1Database): Promise<WeeklyMenu[]> {
+  const rows = await db
+    .prepare(
+      "SELECT data FROM weekly_menus WHERE status = 'draft' ORDER BY week_start DESC",
+    )
+    .all<{ data: string }>();
+  return (rows.results ?? []).map((r) => JSON.parse(r.data) as WeeklyMenu);
+}
+
+// 상태와 무관하게 특정 주를 조회(발행 여부 확인·검토 화면 로드용).
+export async function getWeekAnyStatus(
+  db: D1Database,
+  weekStart: string,
+): Promise<{ menu: WeeklyMenu; status: string } | null> {
+  const row = await db
+    .prepare("SELECT data, status FROM weekly_menus WHERE week_start = ?")
+    .bind(weekStart)
+    .first<{ data: string; status: string }>();
+  return row
+    ? { menu: JSON.parse(row.data) as WeeklyMenu, status: row.status }
+    : null;
+}

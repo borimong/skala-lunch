@@ -1,0 +1,366 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`parseWeeklyExcel — 실제 샘플(2026-07-27 주간표) > 전체 스냅샷(회귀 방지) 1`] = `
+{
+  "days": [
+    {
+      "date": "2026-07-27",
+      "dessert": "결명자차",
+      "dinner": {
+        "dishes": [
+          {
+            "isMain": true,
+            "name": "순살감자탕",
+          },
+          {
+            "isMain": true,
+            "name": "메밀전병",
+          },
+          {
+            "isMain": false,
+            "name": "쌀밥",
+          },
+          {
+            "isMain": false,
+            "name": "청포묵무침",
+          },
+          {
+            "isMain": false,
+            "name": "고추쌈장무침",
+          },
+          {
+            "isMain": false,
+            "name": "깍두기",
+          },
+        ],
+        "origin": "돈육:국내산
+돈골농축액:국내산",
+      },
+      "lunch": {
+        "dishes": [
+          {
+            "isMain": true,
+            "name": "짜장밥",
+          },
+          {
+            "isMain": true,
+            "name": "야채짬뽕국",
+          },
+          {
+            "isMain": false,
+            "name": "모듬탕수*소스",
+          },
+          {
+            "isMain": false,
+            "name": "청경채굴소스볶음",
+          },
+          {
+            "isMain": false,
+            "name": "반달단무지",
+          },
+          {
+            "isMain": false,
+            "name": "포기김치",
+          },
+          {
+            "isMain": false,
+            "name": "샐러드*드레싱*토핑",
+          },
+        ],
+        "origin": "돈육:국내산
+탕수육(돈육):국내산
+돈육:국내산",
+      },
+      "weekday": "월",
+    },
+    {
+      "date": "2026-07-28",
+      "dessert": "17차",
+      "dinner": {
+        "dishes": [
+          {
+            "isMain": true,
+            "name": "새우튀김오므라이스*데미소스",
+          },
+          {
+            "isMain": true,
+            "name": "고구마고로케*케찹",
+          },
+          {
+            "isMain": false,
+            "name": "팽이장국",
+          },
+          {
+            "isMain": false,
+            "name": "실곤약야채무침",
+          },
+          {
+            "isMain": false,
+            "name": "오이피클",
+          },
+          {
+            "isMain": false,
+            "name": "포기김치",
+          },
+        ],
+      },
+      "lunch": {
+        "dishes": [
+          {
+            "isMain": true,
+            "name": "소고기미역국",
+          },
+          {
+            "isMain": true,
+            "name": "제육김치&두부찜",
+          },
+          {
+            "isMain": false,
+            "name": "쌀밥",
+          },
+          {
+            "isMain": false,
+            "name": "조미김구이",
+          },
+          {
+            "isMain": false,
+            "name": "오리엔탈상추무침",
+          },
+          {
+            "isMain": false,
+            "name": "열무김치",
+          },
+          {
+            "isMain": false,
+            "name": "샐러드*드레싱*토핑",
+          },
+        ],
+        "origin": "우육:호주산
+돈육:국내산",
+      },
+      "weekday": "화",
+    },
+    {
+      "date": "2026-07-29",
+      "dessert": "메밀차",
+      "dinner": {
+        "dishes": [
+          {
+            "isMain": true,
+            "name": "부대찌개",
+          },
+          {
+            "isMain": true,
+            "name": "해물완자조림",
+          },
+          {
+            "isMain": false,
+            "name": "쌀밥",
+          },
+          {
+            "isMain": false,
+            "name": "아몬드멸치볶음",
+          },
+          {
+            "isMain": false,
+            "name": "미나리숙주무침",
+          },
+          {
+            "isMain": false,
+            "name": "열무김치",
+          },
+        ],
+        "origin": "부대찌개햄(계육,돈육)
+:국내산,국내산
+스모크햄(계육,돈육)
+:국내산,국내산
+사골농축액(우사골):호주산
+해물완자(오징어):외국산",
+      },
+      "lunch": {
+        "dishes": [
+          {
+            "isMain": true,
+            "name": "冷(냉)도토리묵국",
+          },
+          {
+            "isMain": true,
+            "name": "간장돼지불백",
+          },
+          {
+            "isMain": false,
+            "name": "쌀밥",
+          },
+          {
+            "isMain": false,
+            "name": "어묵볶음",
+          },
+          {
+            "isMain": false,
+            "name": "양념깻잎지",
+          },
+          {
+            "isMain": false,
+            "name": "알타리",
+          },
+          {
+            "isMain": false,
+            "name": "샐러드*드레싱*토핑",
+          },
+        ],
+        "origin": "돈육:국내산",
+      },
+      "weekday": "수",
+    },
+    {
+      "date": "2026-07-30",
+      "dessert": "옥수수차",
+      "dinner": {
+        "dishes": [
+          {
+            "isMain": true,
+            "name": "버섯만두전골",
+          },
+          {
+            "isMain": true,
+            "name": "고기완자조림",
+          },
+          {
+            "isMain": false,
+            "name": "쌀밥",
+          },
+          {
+            "isMain": false,
+            "name": "김말이강정",
+          },
+          {
+            "isMain": false,
+            "name": "산고추지",
+          },
+          {
+            "isMain": false,
+            "name": "포기김치",
+          },
+        ],
+        "origin": "고기완자(계육,돈육)
+:국내산,국내산",
+      },
+      "lunch": {
+        "dishes": [
+          {
+            "isMain": true,
+            "name": "삼색수제비국",
+          },
+          {
+            "isMain": true,
+            "name": "너비아니*파채",
+          },
+          {
+            "isMain": false,
+            "name": "쌀밥",
+          },
+          {
+            "isMain": false,
+            "name": "비엔나케찹볶음",
+          },
+          {
+            "isMain": false,
+            "name": "오이생채",
+          },
+          {
+            "isMain": false,
+            "name": "깍두기",
+          },
+          {
+            "isMain": false,
+            "name": "샐러드*드레싱*토핑",
+          },
+        ],
+        "origin": "너비아니(돈육,계육)
+:국내산,국내산
+비엔나소시지(계육):국내산",
+      },
+      "weekday": "목",
+    },
+    {
+      "date": "2026-07-31",
+      "dessert": "쟈스민차",
+      "dinner": {
+        "dishes": [
+          {
+            "isMain": true,
+            "name": "돈코츠라멘*시치미",
+          },
+          {
+            "isMain": true,
+            "name": "타코야끼*소스",
+          },
+          {
+            "isMain": false,
+            "name": "쌀밥",
+          },
+          {
+            "isMain": false,
+            "name": "참깨연근무침",
+          },
+          {
+            "isMain": false,
+            "name": "락교",
+          },
+          {
+            "isMain": false,
+            "name": "포기김치",
+          },
+        ],
+        "origin": "돈육:스페인산
+가스오부시(가다랑어)
+:인도네시아산",
+      },
+      "lunch": {
+        "dishes": [
+          {
+            "isMain": true,
+            "name": "매콤돈육장조림",
+          },
+          {
+            "isMain": true,
+            "name": "근대된장국",
+          },
+          {
+            "isMain": false,
+            "name": "쌀밥",
+          },
+          {
+            "isMain": false,
+            "name": "마늘쫑햄복음",
+          },
+          {
+            "isMain": false,
+            "name": "치커리겉절이",
+          },
+          {
+            "isMain": false,
+            "name": "포기김치",
+          },
+          {
+            "isMain": false,
+            "name": "샐러드*드레싱*토핑",
+          },
+        ],
+        "origin": "돈육:국내산
+세절햄(돈육,계육)
+:국내산+독일산+국내산,
+국내산",
+      },
+      "weekday": "금",
+    },
+  ],
+  "notes": [
+    "♣ 밥/죽/누룽지용 쌀(백미, 찹쌀, 현미, 흑미,보리쌀)은 국내산을, 배추김치는 (배추:국내산, 고춧가루:중국산), 조리용김치 (배추:국내산, 고춧가루:중국산), 두부는 (대두:외국산) 을 사용합니다.",
+    "♣ 상기 메뉴는 식재수불 사정에 의해 변경될 수 있습니다.",
+    "♣ 직원식당에 대한 문의 사항이나 건의사항이 있으시면 연락주시기 바랍니다.  ㈜후니드 구내식당 점장 이수민 : sumany76@whoneed.co.kr",
+  ],
+  "weekEnd": "2026-07-31",
+  "weekStart": "2026-07-27",
+}
+`;

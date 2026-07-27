@@ -1,7 +1,14 @@
 import { weeklyMenuSchema } from "../shared/menu";
-import { requireAdmin, unauthorized } from "./auth";
+import { requireAdmin, requireIngest, unauthorized } from "./auth";
 import { extractMenu } from "./gemini";
-import { getLatestWeek, getPublishedWeek, saveWeek } from "./menus";
+import { ingestWeeklyExcel } from "./ingest";
+import {
+  getLatestWeek,
+  getPendingDrafts,
+  getPublishedWeek,
+  getWeekAnyStatus,
+  saveWeek,
+} from "./menus";
 import { notifyToday } from "./slack";
 
 export default {
@@ -28,6 +35,25 @@ export default {
         return menu
           ? Response.json(menu)
           : Response.json({ error: "no menu" }, { status: 404 });
+      }
+
+      // 관리자: 검토 대기(보류) 주 목록
+      if (pathname === "/api/menus/pending" && method === "GET") {
+        if (!requireAdmin(request, env)) return unauthorized();
+        const drafts = await getPendingDrafts(env.DB);
+        return Response.json({ drafts });
+      }
+
+      // 관리자: 특정 주 초안/데이터 로드(검토 화면용, 상태 무관)
+      const draftMatch = pathname.match(
+        /^\/api\/menus\/(\d{4}-\d{2}-\d{2})\/draft$/,
+      );
+      if (draftMatch && method === "GET") {
+        if (!requireAdmin(request, env)) return unauthorized();
+        const row = await getWeekAnyStatus(env.DB, draftMatch[1]);
+        return row
+          ? Response.json(row)
+          : Response.json({ error: "not found" }, { status: 404 });
       }
 
       // 공개: 특정 주
@@ -79,6 +105,31 @@ export default {
         }
         await saveWeek(env.DB, parsed.data, payload.imageKey);
         return Response.json({ ok: true });
+      }
+
+      // 자동 인그레스: 차주 식단 엑셀(base64) 수신 → 파싱 → 검증 게이트 → 발행/보류
+      // (Apps Script가 매주 금요일 밤 호출. 공개 슬랙은 건드리지 않음.)
+      if (pathname === "/api/ingest/weekly" && method === "POST") {
+        if (!requireIngest(request, env)) return unauthorized();
+        const payload = (await request.json()) as { contentBase64?: unknown };
+        if (
+          typeof payload.contentBase64 !== "string" ||
+          payload.contentBase64.length === 0
+        ) {
+          return Response.json(
+            {
+              status: "error",
+              reasons: ["contentBase64(엑셀 base64)가 필요해요."],
+              warnings: [],
+              summary: "",
+            },
+            { status: 400 },
+          );
+        }
+        const result = await ingestWeeklyExcel(env, payload.contentBase64);
+        return Response.json(result, {
+          status: result.status === "error" ? 422 : 200,
+        });
       }
 
       // 관리자: 오늘의 메뉴 슬랙 즉시 발송 (?date=YYYY-MM-DD로 특정 날짜 테스트/재발송)

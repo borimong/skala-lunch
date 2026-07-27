@@ -2,6 +2,7 @@ import { Routes, Route } from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import AdminUploadPage from "./pages/AdminUploadPage";
 import AdminReviewPage from "./pages/AdminReviewPage";
+import AdminPendingPage from "./pages/AdminPendingPage";
 import AdminGate from "./components/AdminGate";
 
 export default function App() {
@@ -21,6 +22,14 @@ export default function App() {
         element={
           <AdminGate>
             <AdminReviewPage />
+          </AdminGate>
+        }
+      />
+      <Route
+        path="/admin/pending"
+        element={
+          <AdminGate>
+            <AdminPendingPage />
           </AdminGate>
         }
       />
