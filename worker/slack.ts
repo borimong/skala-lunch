@@ -12,7 +12,7 @@ function formatMeal(meal?: Meal): string {
   return [...mains, ...sides].join(" · ");
 }
 
-function buildPayload(day: Day, publicUrl: string): SlackPayload {
+export function buildPayload(day: Day, publicUrl: string): SlackPayload {
   const dateLabel = `${day.date.slice(5).replace("-", "/")} (${day.weekday})`;
   const blocks: Record<string, unknown>[] = [
     {
@@ -44,6 +44,9 @@ function buildPayload(day: Day, publicUrl: string): SlackPayload {
   const context: string[] = [];
   if (day.dessert) context.push(`후식: ${day.dessert}`);
   context.push(`<${publicUrl}|전체 식단표 보기>`);
+  context.push(
+    "<https://skalacafe.netlify.app/|사내카페 주문하기(by 5반 김태관님)>",
+  );
   blocks.push({
     type: "context",
     elements: [{ type: "mrkdwn", text: context.join("  ·  ") }],
