@@ -1,6 +1,7 @@
 import { mondayOf, weeklyMenuSchema } from "../shared/menu";
 import { requireAdmin, requireIngest, unauthorized } from "./auth";
 import { preflight, withCors } from "./cors";
+import { swaggerUiHtml } from "./docs";
 import { extractMenu } from "./gemini";
 import { ingestWeeklyExcel } from "./ingest";
 import {
@@ -10,6 +11,7 @@ import {
   getWeekAnyStatus,
   saveWeek,
 } from "./menus";
+import { openApiSpec } from "./openapi";
 import { notifyToday } from "./slack";
 import { buildTodayResponse, todayKST } from "./today";
 
@@ -27,10 +29,21 @@ export default {
       // 공개 GET 엔드포인트: 브라우저 cross-origin 소비자를 위한 프리플라이트 응답.
       const isPublicApiGet =
         pathname === "/api/today" ||
+        pathname === "/api/openapi.json" ||
         pathname === "/api/menus/current" ||
         /^\/api\/menus\/\d{4}-\d{2}-\d{2}$/.test(pathname);
       if (method === "OPTIONS" && isPublicApiGet) {
         return preflight();
+      }
+
+      // 공개: API 문서(Swagger UI)와 OpenAPI 스펙
+      if (pathname === "/api/docs" && method === "GET") {
+        return new Response(swaggerUiHtml, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
+      if (pathname === "/api/openapi.json" && method === "GET") {
+        return withCors(Response.json(openApiSpec));
       }
 
       // 공개: 오늘(KST)의 메뉴 한 날치 (?date=YYYY-MM-DD로 특정 날짜 조회)

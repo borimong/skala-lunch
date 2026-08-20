@@ -1,0 +1,199 @@
+# SKALA 식단 API — OpenAPI 3.1 스펙
+# 라이브 문서: https://skala-lunch.ewkimhyunsu11.workers.dev/api/docs
+# 라이브 스펙:  https://skala-lunch.ewkimhyunsu11.workers.dev/api/openapi.json
+# (워커가 서빙하는 스펙은 worker/openapi.ts 가 단일 원천이며, 이 파일은 사람이 읽기 좋은 사본입니다.)
+openapi: 3.1.0
+info:
+  title: SKALA 식단 API
+  version: 1.0.0
+  description: |
+    사내 주간 식단 데이터를 제공하는 공개 API.
+
+    - 인증 불필요(공개 GET). 모든 응답은 `Access-Control-Allow-Origin: *` 로 CORS 허용되어 브라우저에서 직접 호출 가능합니다.
+    - 날짜는 모두 `YYYY-MM-DD`(KST 기준). 주(week)는 월요일 시작.
+    - 오늘 하루치만 필요하면 `/api/today`, 주간 전체는 `/api/menus/current` 를 쓰세요.
+servers:
+  - url: https://skala-lunch.ewkimhyunsu11.workers.dev
+paths:
+  /api/today:
+    get:
+      summary: 오늘의 메뉴(한 날치)
+      description: >
+        오늘(KST) 하루치 메뉴를 평면화해 반환합니다. `hasMenu` 로 표시할 메뉴 유무를
+        바로 판별할 수 있어 위젯 등에 적합합니다.
+      operationId: getToday
+      parameters:
+        - name: date
+          in: query
+          required: false
+          description: >
+            특정 날짜 조회(`YYYY-MM-DD`). 생략하면 오늘(KST).
+            주말·미발행일도 200으로 응답하며 `hasMenu:false`.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: "2026-08-20"
+      responses:
+        "200":
+          description: 해당 날짜의 오늘치 응답
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodayResponse"
+        "400":
+          description: date 형식 오류
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/menus/current:
+    get:
+      summary: 가장 최근 발행 주간 식단
+      description: 가장 최근에 발행된 한 주(월~금)의 전체 식단을 반환합니다.
+      operationId: getCurrentWeek
+      responses:
+        "200":
+          description: 주간 식단
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyMenu"
+        "404":
+          description: 발행된 주가 없음
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/menus/{weekStart}:
+    get:
+      summary: 특정 주간 식단
+      description: 지정한 월요일(`weekStart`)로 시작하는 주의 식단을 반환합니다.
+      operationId: getWeek
+      parameters:
+        - name: weekStart
+          in: path
+          required: true
+          description: 주 시작(월요일) 날짜 `YYYY-MM-DD`
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: "2026-08-17"
+      responses:
+        "200":
+          description: 주간 식단
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyMenu"
+        "404":
+          description: 해당 주 없음
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  schemas:
+    Dish:
+      type: object
+      required: [name, isMain]
+      properties:
+        name:
+          type: string
+          example: 돈까스
+        isMain:
+          type: boolean
+          description: 메인 요리 여부(true=메인, false=사이드)
+    Meal:
+      type: object
+      required: [dishes]
+      properties:
+        dishes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Dish"
+        origin:
+          type: string
+          description: 원산지 표기(선택)
+          example: "돈까스(돈육):국내산"
+    Day:
+      type: object
+      required: [date, weekday]
+      properties:
+        date:
+          type: string
+          example: "2026-08-20"
+        weekday:
+          type: string
+          example: 목
+        label:
+          type: string
+          description: 특이사항 라벨(선택)
+        isHoliday:
+          type: boolean
+          description: 휴무 여부(선택)
+        lunch:
+          $ref: "#/components/schemas/Meal"
+        dinner:
+          $ref: "#/components/schemas/Meal"
+        dessert:
+          type: string
+          description: 후식(선택)
+    WeeklyMenu:
+      type: object
+      required: [weekStart, weekEnd, days]
+      properties:
+        weekStart:
+          type: string
+          example: "2026-08-17"
+        weekEnd:
+          type: string
+          example: "2026-08-21"
+        cafeteria:
+          type: string
+          description: 식당명(선택)
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/Day"
+        notes:
+          type: array
+          items:
+            type: string
+    TodayResponse:
+      type: object
+      required:
+        [date, weekday, hasMenu, isHoliday, lunch, dinner, dessert, note]
+      properties:
+        date:
+          type: string
+          example: "2026-08-20"
+        weekday:
+          type: string
+          example: 목
+        hasMenu:
+          type: boolean
+          description: 표시할 중/석식이 하나라도 있으면 true
+        isHoliday:
+          type: boolean
+        cafeteria:
+          type: string
+          description: 식당명(선택)
+        lunch:
+          oneOf:
+            - $ref: "#/components/schemas/Meal"
+            - type: "null"
+        dinner:
+          oneOf:
+            - $ref: "#/components/schemas/Meal"
+            - type: "null"
+        dessert:
+          type: [string, "null"]
+        note:
+          type: [string, "null"]
+          description: '메뉴 없는 사유("주말"·"휴무"·"미발행"·"등록된 메뉴가 없어요"). 메뉴 있으면 null'
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
