@@ -16,7 +16,7 @@ export const openApiSpec = {
   paths: {
     "/api/today": {
       get: {
-        summary: "오늘의 메뉴(한 날치)",
+        summary: "오늘의 메뉴",
         description:
           "오늘(KST) 하루치 메뉴를 평면화해 반환합니다. `hasMenu` 로 표시할 메뉴 유무를 바로 판별할 수 있어 위젯 등에 적합합니다.",
         operationId: "getToday",
