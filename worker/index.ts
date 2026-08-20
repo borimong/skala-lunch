@@ -1,5 +1,6 @@
-import { weeklyMenuSchema } from "../shared/menu";
+import { mondayOf, weeklyMenuSchema } from "../shared/menu";
 import { requireAdmin, requireIngest, unauthorized } from "./auth";
+import { preflight, withCors } from "./cors";
 import { extractMenu } from "./gemini";
 import { ingestWeeklyExcel } from "./ingest";
 import {
@@ -10,6 +11,7 @@ import {
   saveWeek,
 } from "./menus";
 import { notifyToday } from "./slack";
+import { buildTodayResponse, todayKST } from "./today";
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -20,6 +22,31 @@ export default {
     try {
       if (pathname === "/api/health") {
         return Response.json({ ok: true });
+      }
+
+      // 공개 GET 엔드포인트: 브라우저 cross-origin 소비자를 위한 프리플라이트 응답.
+      const isPublicApiGet =
+        pathname === "/api/today" ||
+        pathname === "/api/menus/current" ||
+        /^\/api\/menus\/\d{4}-\d{2}-\d{2}$/.test(pathname);
+      if (method === "OPTIONS" && isPublicApiGet) {
+        return preflight();
+      }
+
+      // 공개: 오늘(KST)의 메뉴 한 날치 (?date=YYYY-MM-DD로 특정 날짜 조회)
+      if (pathname === "/api/today" && method === "GET") {
+        const dateParam = url.searchParams.get("date") ?? undefined;
+        if (dateParam && !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+          return withCors(
+            Response.json(
+              { error: "date는 YYYY-MM-DD 형식이어야 해요." },
+              { status: 400 },
+            ),
+          );
+        }
+        const date = dateParam ?? todayKST();
+        const menu = await getPublishedWeek(env.DB, mondayOf(date));
+        return withCors(Response.json(buildTodayResponse(date, menu)));
       }
 
       // 관리자 토큰 확인
@@ -33,8 +60,8 @@ export default {
       if (pathname === "/api/menus/current" && method === "GET") {
         const menu = await getLatestWeek(env.DB);
         return menu
-          ? Response.json(menu)
-          : Response.json({ error: "no menu" }, { status: 404 });
+          ? withCors(Response.json(menu))
+          : withCors(Response.json({ error: "no menu" }, { status: 404 }));
       }
 
       // 관리자: 검토 대기(보류) 주 목록
@@ -61,8 +88,8 @@ export default {
       if (weekMatch && method === "GET") {
         const menu = await getPublishedWeek(env.DB, weekMatch[1]);
         return menu
-          ? Response.json(menu)
-          : Response.json({ error: "not found" }, { status: 404 });
+          ? withCors(Response.json(menu))
+          : withCors(Response.json({ error: "not found" }, { status: 404 }));
       }
 
       // 관리자: 사진 → Gemini 추출 (저장하지 않고 초안 반환)
