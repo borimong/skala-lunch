@@ -1,0 +1,29 @@
+name: CI
+
+# PR과 main 이외 브랜치 push에서 테스트·빌드를 검증한다.
+# 배포는 하지 않으므로 Cloudflare 자격증명이 필요 없다.
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Test
+        run: npm test
+
+      # 타입 오류·빌드 깨짐을 배포 전에 잡는다.
+      - name: Build
+        run: npm run build

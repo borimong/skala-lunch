@@ -1,0 +1,46 @@
+name: Deploy
+
+# main에 머지(push)되면 Cloudflare Workers로 자동 배포한다.
+# 협업자는 GitHub 권한만 있으면 되고, Cloudflare 계정 접근은 필요 없다.
+# 배포에 쓰이는 CLOUDFLARE_API_TOKEN은 repo Secrets에 저장된 제한 토큰이다.
+on:
+  push:
+    branches:
+      - main
+
+# 연속 머지 시 배포가 겹치지 않도록 직렬화한다.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # 배포 전에 테스트로 회귀를 막는다.
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # D1 스키마 변경(migrations/*.sql)을 원격 DB에 반영한다.
+      # 새 마이그레이션이 없으면 아무 것도 적용하지 않는다.
+      - name: Apply D1 migrations
+        run: npx wrangler d1 migrations apply skala-lunch --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Deploy to Cloudflare Workers
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
