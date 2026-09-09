@@ -14,6 +14,7 @@ import {
 import { openApiSpec } from "./openapi";
 import { notifyToday } from "./slack";
 import { buildTodayResponse, todayKST } from "./today";
+import { collectMeals, ensureNutrition } from "./nutrition";
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -31,6 +32,7 @@ export default {
         pathname === "/api/today" ||
         pathname === "/api/openapi.json" ||
         pathname === "/api/menus/current" ||
+        pathname === "/api/nutrition" ||
         /^\/api\/menus\/\d{4}-\d{2}-\d{2}$/.test(pathname);
       if (method === "OPTIONS" && isPublicApiGet) {
         return preflight();
@@ -75,6 +77,51 @@ export default {
         return menu
           ? withCors(Response.json(menu))
           : withCors(Response.json({ error: "no menu" }, { status: 404 }));
+      }
+
+      // 공개: 특정 날짜+끼니에 캐시된 요리별 영양정보(요리명 -> 탄단지/칼로리).
+      // 프론트(DishList.tsx)가 화면에 그릴 때 이걸 받아서 이름으로 찾아 씀.
+      // date/mealType 둘 다 필수 — 같은 요리 이름이라도 끼니마다 재보정된
+      // 값이 다를 수 있어서(worker/nutrition.ts의 (date,meal_type,food_name)
+      // 복합키 캐시 참고) 통째로 다 주지 않고 정확히 그 끼니 것만 준다.
+      if (pathname === "/api/nutrition" && method === "GET") {
+        const date = url.searchParams.get("date");
+        const mealType = url.searchParams.get("mealType");
+        if (
+          !date ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+          (mealType !== "lunch" && mealType !== "dinner")
+        ) {
+          return withCors(
+            Response.json(
+              { error: "date(YYYY-MM-DD)와 mealType(lunch|dinner)가 필요해요." },
+              { status: 400 },
+            ),
+          );
+        }
+        const rows = await env.DB.prepare(
+          "SELECT food_name, serving_g, carb_g, protein_g, fat_g, kcal FROM dish_nutrition WHERE date = ? AND meal_type = ?",
+        )
+          .bind(date, mealType)
+          .all<{
+            food_name: string;
+            serving_g: number;
+            carb_g: number;
+            protein_g: number;
+            fat_g: number;
+            kcal: number;
+          }>();
+        const byName: Record<string, unknown> = {};
+        for (const row of rows.results ?? []) {
+          byName[row.food_name] = {
+            serving_g: row.serving_g,
+            carb_g: row.carb_g,
+            protein_g: row.protein_g,
+            fat_g: row.fat_g,
+            kcal: row.kcal,
+          };
+        }
+        return withCors(Response.json(byName));
       }
 
       // 관리자: 검토 대기(보류) 주 목록
@@ -144,6 +191,23 @@ export default {
           );
         }
         await saveWeek(env.DB, parsed.data, payload.imageKey);
+
+        // 발행 직후 딱 한 번, 이번 주 요리들의 영양정보를 계산해서 D1에
+        // 캐시해둔다(요리 수만큼 OpenAI를 호출하니 몇 초 걸릴 수 있음 —
+        // "간단한 버전"이라 일부러 응답을 기다리게 함, 백그라운드로 돌리려면
+        // ctx.waitUntil 필요한데 지금은 fetch 핸들러에 ctx를 안 받고 있어서
+        // 나중에 개선 여지로 남겨둠).
+        // 실패해도(예: OpenAI 키 미설정, 일부 요리 추정 실패) 발행 자체는
+        // 이미 끝났으니 막지 않고 로그만 남긴다 — 다음 발행 때 재시도됨.
+        if (env.OPENAI_API_KEY) {
+          const meals = collectMeals(parsed.data.days);
+          try {
+            await ensureNutrition(env.DB, env.OPENAI_API_KEY, meals);
+          } catch (err) {
+            console.error("영양정보 계산 실패:", err);
+          }
+        }
+
         return Response.json({ ok: true });
       }
 

@@ -44,12 +44,16 @@ export default function DayColumn({ day, isToday, showOrigin }: Props) {
             accent="text-emerald-700"
             meal={day.lunch}
             showOrigin={showOrigin}
+            date={day.date}
+            mealType="lunch"
           />
           <MealBlock
             title="석식"
             accent="text-indigo-700"
             meal={day.dinner}
             showOrigin={showOrigin}
+            date={day.date}
+            mealType="dinner"
           />
           {day.dessert && (
             <div className="border-t border-gray-100 pt-2 text-xs text-gray-500">

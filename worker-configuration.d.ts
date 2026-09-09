@@ -10,6 +10,11 @@ interface __BaseEnv_Env {
 	INGEST_TOKEN: string;
 	GEMINI_API_KEY: string;
 	SLACK_WEBHOOK_URL: string;
+	// wrangler secret put OPENAI_API_KEY 로 등록. 영양정보 이식 기능(worker/nutrition.ts)에서 사용.
+	// 이 파일은 원래 `wrangler types`가 자동 생성하는데, 로컬에 .dev.vars가 없으면
+	// 그 명령이 시크릿 타입을 전부 지워버려서 여기 수동으로 한 줄만 추가해둠 —
+	// .dev.vars를 만들고 다시 돌리면 자동으로 이 줄이 생성되면서 정리됨.
+	OPENAI_API_KEY?: string;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
