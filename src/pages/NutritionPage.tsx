@@ -12,7 +12,7 @@ import type { DishNutrition } from "../lib/api";
 const RELIABILITY_BADGE: Record<string, string> = {
   high: "🟢 DB",
   medium: "🟡 DB유사",
-  low: "🟠 GPT추정",
+  low: "🟠 AI추정",
 };
 
 function SourceBadge({ n }: { n?: DishNutrition }) {
@@ -23,8 +23,11 @@ function SourceBadge({ n }: { n?: DishNutrition }) {
 
 type MealRow = { name: string; isMain: boolean } & Partial<DishNutrition>;
 
+// 다른 메뉴(예: 국밥)에 이미 포함됐다고 에이전트가 판단한 요리는
+// 합계에서 뺀다(값 자체는 화면에 취소선으로 그대로 보여줌 — 원본 파이썬
+// generate_page.py와 동일한 방식).
 function sumField(rows: MealRow[], field: "carb_g" | "protein_g" | "fat_g" | "kcal"): number {
-  return rows.reduce((sum, r) => sum + (r[field] ?? 0), 0);
+  return rows.reduce((sum, r) => sum + (r.excludedReason ? 0 : (r[field] ?? 0)), 0);
 }
 
 function MealTable({
@@ -78,25 +81,33 @@ function MealTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.name} className="border-b border-gray-100 last:border-0">
-                <td className={`px-3 py-2 ${r.isMain ? "font-semibold text-gray-900" : "text-gray-700"}`}>
-                  {r.name}
-                </td>
-                <td className="px-3 py-2 text-gray-500">
-                  {r.serving_g != null ? `${r.serving_g}g` : "—"}
-                </td>
-                <td className="px-3 py-2 text-gray-500">
-                  {r.carb_g != null ? `${r.carb_g}g / ${r.protein_g}g / ${r.fat_g}g` : "—"}
-                </td>
-                <td className="px-3 py-2 font-medium text-gray-900">
-                  {r.kcal != null ? `${r.kcal}kcal` : "—"}
-                </td>
-                <td className="px-3 py-2 text-xs">
-                  <SourceBadge n={r as DishNutrition} />
-                </td>
-              </tr>
-            ))}
+            {rows.map((r) => {
+              const excluded = !!r.excludedReason;
+              const valCls = excluded ? "text-gray-400 line-through" : "";
+              return (
+                <tr key={r.name} className="border-b border-gray-100 last:border-0">
+                  <td className={`px-3 py-2 ${r.isMain ? "font-semibold text-gray-900" : "text-gray-700"}`}>
+                    {r.name}
+                  </td>
+                  <td className={`px-3 py-2 text-gray-500 ${valCls}`}>
+                    {r.serving_g != null ? `${r.serving_g}g` : "—"}
+                  </td>
+                  <td className={`px-3 py-2 text-gray-500 ${valCls}`}>
+                    {r.carb_g != null ? `${r.carb_g}g / ${r.protein_g}g / ${r.fat_g}g` : "—"}
+                  </td>
+                  <td className={`px-3 py-2 font-medium text-gray-900 ${valCls}`}>
+                    {r.kcal != null ? `${r.kcal}kcal` : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    {excluded ? (
+                      <span className="text-gray-400">🔁 {r.excludedReason}</span>
+                    ) : (
+                      <SourceBadge n={r as DishNutrition} />
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             <tr className="bg-gray-50 font-bold text-gray-900">
               <td className="px-3 py-2" colSpan={2}>
                 합계
@@ -166,7 +177,7 @@ export default function NutritionPage() {
         )}
 
         <p className="mt-4 text-xs text-gray-400">
-          영양정보는 OpenAI 추정치이며 실제와 다를 수 있어요.
+          영양정보는 AI 추정치이며 실제와 다를 수 있어요.
         </p>
       </main>
     </div>

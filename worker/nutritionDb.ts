@@ -18,9 +18,9 @@ export interface DbLookupResult {
 
 // 참고: DB의 Z10500("1회 섭취참고량") 필드를 제공량 기준으로 써보려 했으나,
 // 매칭된 레코드마다 값이 들쭉날쭉해서(같은 "쌀밥"이어도 100g/250mL/450mL로
-// 제각각) 실제 사용해보니 비현실적인 결과가 나옴을 확인(2026-09-10) — 그래서
-// 이 필드는 안 쓰고, 실제 제공량은 foodHeuristics.guessServingG(카테고리
-// 고정값) × consumptionRatio(메인/반찬 비율)로 계산한다(worker/nutrition.ts).
+// 제각각) 실제 사용해보니 비현실적인 결과가 나옴을 확인(2026-09-10). 이후
+// 제공량 결정 자체를 에이전트(worker/nutrition.ts)에게 넘기는 구조로
+// 바뀌면서 이 필드는 아예 안 씀 — 여기선 100g당 실측값과 유사도만 반환한다.
 
 // difflib.SequenceMatcher와 똑같지는 않지만 비슷한 역할을 하는 bigram 기반
 // Dice 유사도. 한글 음절 단위로도 잘 동작해서 이 정도면 충분하다고 판단.
@@ -39,7 +39,6 @@ function similarity(a: string, b: string): number {
   return (2 * overlap) / (setA.size + setB.size);
 }
 
-export const SIMILARITY_HIGH = 0.6;
 export const SIMILARITY_LOW = 0.25;
 
 // data.go.kr 키는 .env/.dev.vars에 URL-인코딩된 형태(%2B, %3D 등)로 저장돼있어서

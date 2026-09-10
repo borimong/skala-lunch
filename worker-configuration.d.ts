@@ -10,11 +10,15 @@ interface __BaseEnv_Env {
 	INGEST_TOKEN: string;
 	GEMINI_API_KEY: string;
 	SLACK_WEBHOOK_URL: string;
-	// wrangler secret put OPENAI_API_KEY 로 등록. 영양정보 이식 기능(worker/nutrition.ts)에서 사용.
+	// wrangler secret put GEMINI_NUTRITION_API_KEY 로 등록. 영양정보 이식 기능
+	// (worker/nutrition.ts)에서 사용 — Google AI Studio(aistudio.google.com/apikey)
+	// 에서 무료로 발급받은 키. 사진→메뉴 추출용 GEMINI_API_KEY(김현수님 명의)와는
+	// 별개 키다(그분 무료 할당량을 이 기능이 갉아먹지 않도록). 원래 OPENAI_API_KEY를
+	// 썼었는데 OpenAI 계정 크레딧이 소진돼서(2026-09-10) Gemini로 교체함.
 	// 이 파일은 원래 `wrangler types`가 자동 생성하는데, 로컬에 .dev.vars가 없으면
 	// 그 명령이 시크릿 타입을 전부 지워버려서 여기 수동으로 한 줄만 추가해둠 —
 	// .dev.vars를 만들고 다시 돌리면 자동으로 이 줄이 생성되면서 정리됨.
-	OPENAI_API_KEY?: string;
+	GEMINI_NUTRITION_API_KEY?: string;
 	// wrangler secret put DATA_GO_KR_API_KEY 로 등록. 식약처 식품영양성분DB
 	// 조회(worker/nutritionDb.ts)에서 사용 — 원본 파이썬의 FOOD_SAFETY_API_KEY와
 	// 동일한 값(공공데이터포털에서 발급받은 data.go.kr 통합 인증키).

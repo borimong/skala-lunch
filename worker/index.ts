@@ -100,7 +100,7 @@ export default {
           );
         }
         const rows = await env.DB.prepare(
-          "SELECT food_name, serving_g, carb_g, protein_g, fat_g, kcal, source, reliability, outlier FROM dish_nutrition WHERE date = ? AND meal_type = ?",
+          "SELECT food_name, serving_g, carb_g, protein_g, fat_g, kcal, source, reliability, outlier, excluded_reason FROM dish_nutrition WHERE date = ? AND meal_type = ?",
         )
           .bind(date, mealType)
           .all<{
@@ -113,6 +113,7 @@ export default {
             source: string;
             reliability: string;
             outlier: number;
+            excluded_reason: string | null;
           }>();
         const byName: Record<string, unknown> = {};
         for (const row of rows.results ?? []) {
@@ -125,6 +126,7 @@ export default {
             source: row.source,
             reliability: row.reliability,
             outlier: !!row.outlier,
+            excludedReason: row.excluded_reason ?? undefined,
           };
         }
         return withCors(Response.json(byName));
@@ -219,16 +221,18 @@ export default {
         await saveWeek(env.DB, parsed.data, payload.imageKey);
 
         // 발행 직후 딱 한 번, 이번 주 요리들의 영양정보를 계산해서 D1에
-        // 캐시해둔다(요리 수만큼 OpenAI를 호출하니 몇 초 걸릴 수 있음 —
-        // "간단한 버전"이라 일부러 응답을 기다리게 함, 백그라운드로 돌리려면
-        // ctx.waitUntil 필요한데 지금은 fetch 핸들러에 ctx를 안 받고 있어서
-        // 나중에 개선 여지로 남겨둠).
-        // 실패해도(예: OpenAI 키 미설정, 일부 요리 추정 실패) 발행 자체는
-        // 이미 끝났으니 막지 않고 로그만 남긴다 — 다음 발행 때 재시도됨.
-        if (env.OPENAI_API_KEY) {
+        // 캐시해둔다(끼니당 Gemini 에이전트 호출 1번, 몇 초 걸릴 수 있음 —
+        // 백그라운드로 돌리려면 ctx.waitUntil 필요한데 지금은 fetch 핸들러에
+        // ctx를 안 받고 있어서 나중에 개선 여지로 남겨둠).
+        // GEMINI_NUTRITION_API_KEY는 사진→메뉴 추출용 GEMINI_API_KEY(김현수님
+        // 명의)와 별개 키다 — 우리가 새로 만드는 이 기능이 그분 무료 할당량을
+        // 몰래 갉아먹지 않도록 사용자 본인 명의로 새로 발급받은 키를 씀.
+        // 실패해도(예: 키 미설정, 일부 요리 추정 실패) 발행 자체는 이미
+        // 끝났으니 막지 않고 로그만 남긴다 — 다음 발행 때 재시도됨.
+        if (env.GEMINI_NUTRITION_API_KEY) {
           const meals = collectMeals(parsed.data.days);
           try {
-            await ensureNutrition(env.DB, env.OPENAI_API_KEY, meals, env.DATA_GO_KR_API_KEY);
+            await ensureNutrition(env.DB, env.GEMINI_NUTRITION_API_KEY, meals, env.DATA_GO_KR_API_KEY);
           } catch (err) {
             console.error("영양정보 계산 실패:", err);
           }

@@ -15,9 +15,10 @@ export type DishNutrition = {
   protein_g: number;
   fat_g: number;
   kcal: number;
-  source: "food_safety_db" | "food_safety_db(유사검색)" | "gpt_estimate";
+  source: "food_safety_db" | "llm_estimate";
   reliability: "high" | "medium" | "low";
   outlier: boolean;
+  excludedReason?: string;
 };
 
 // 상세 영양정보 페이지(NutritionPage)용. worker/nutrition.ts의 캐시 키가
