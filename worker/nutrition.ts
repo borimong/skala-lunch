@@ -12,7 +12,7 @@
 // 끼니 총합이 너무 높을 때의 재보정(correctMeal)은 GPT 직접추정(최후수단)
 // 요리에만 적용한다 — DB 실측값은 근거가 있는 값이라 함부로 안 건드린다.
 
-import { guessServingG, isOutlier } from "./foodHeuristics";
+import { consumptionRatio, guessServingG, isOutlier } from "./foodHeuristics";
 import { lookupBest, SIMILARITY_HIGH } from "./nutritionDb";
 
 export type Reliability = "high" | "medium" | "low";
@@ -75,13 +75,22 @@ function kcalFromMacros(carb_g: number, protein_g: number, fat_g: number): numbe
 // 만큼으로 스케일링해서 실제 먹는 양 기준 값으로 바꾼다. 이상치 판단은
 // 스케일링 전 100g당 값 기준으로 한다(제공량 추정 자체가 근사치라서, 판단
 // 기준을 스케일링된 값으로 하면 오차가 두 번 겹친다).
+// DB는 100g당 값만 알려줄 뿐 "이 사람이 실제로 몇 g을 먹을지"는 모른다 —
+// 그건 메인/반찬 여부에 따라 코드가 고정 비율로 정한다(foodHeuristics.
+// consumptionRatio, 2026-09-10 사용자 규칙: 메인 90% / 밥류 예외 40% /
+// 그 외 반찬 20%). 기준량은 DB의 Z10500("1회 섭취참고량")을 시도해봤으나
+// 매칭된 레코드마다 값이 들쭉날쭉해서(같은 "쌀밥"이어도 100g/250mL/450mL로
+// 제각각) 실제로 써보니 쌀밥이 40g, 크림스프가 2g처럼 비현실적인 값이
+// 나옴을 확인함(2026-09-10) — 그래서 안정적인 카테고리 고정값(guessServingG)을
+// "1회 제공량" 기준으로 계속 쓰고, 거기에 비율을 곱하는 방식으로 되돌림.
 function scaleDbResult(
-  dishName: string,
+  dish: DishRef,
   db: { kcalPer100g: number; carbPer100g: number; proteinPer100g: number; fatPer100g: number },
 ): { nutrition: Omit<DishNutrition, "source" | "reliability">; outlier: boolean } {
-  const servingG = guessServingG(dishName);
+  const referenceG = guessServingG(dish.name);
+  const servingG = Math.round(referenceG * consumptionRatio(dish.name, dish.isMain));
   const factor = servingG / 100;
-  const outlier = isOutlier(dishName, db.kcalPer100g);
+  const outlier = isOutlier(dish.name, db.kcalPer100g);
   return {
     nutrition: {
       serving_g: servingG,
@@ -93,20 +102,6 @@ function scaleDbResult(
     },
     outlier,
   };
-}
-
-// 이 요리가 고기 반찬류로 보이는지 이름으로 대충 판단(휴리스틱, AI 호출 없음).
-const MEAT_KEYWORDS = ["고기", "돈육", "닭", "소불고기", "제육", "탕수육", "돈까스", "까스", "불고기", "스테이크", "소세지", "소시지", "햄", "생선", "고등어", "갈비"];
-function looksLikeMeatSide(name: string): boolean {
-  return MEAT_KEYWORDS.some((kw) => name.includes(kw));
-}
-
-function roleHintFor(dish: DishRef): string {
-  return dish.isMain
-    ? "이 요리는 이 끼니의 메인메뉴야. 표준적인 1인분 양을 기준으로 추정해."
-    : looksLikeMeatSide(dish.name)
-      ? "이 요리는 곁들이 반찬이지만 고기류라서, 다른 반찬보다는 양이 좀 더 있는 편이야(메인메뉴보다는 적게)."
-      : "이 요리는 곁들이 반찬이야. 메인메뉴보다 훨씬 적은 소량(예: 30~80g 수준)만 먹는다고 가정해.";
 }
 
 function sleep(ms: number): Promise<void> {
@@ -149,53 +144,136 @@ async function callOpenAiJson(apiKey: string, system: string, user: string): Pro
   throw new Error("OpenAI 호출 실패: 재시도 횟수 초과");
 }
 
-// GPT에게 "이 요리랑 비슷한 이름으로 뭐라고 검색해볼 수 있을까?"만 물어본다.
-// 숫자는 안 만들고 검색어 후보만 받는다(원본 파이썬 estimate_gpt.analyze_dish_structure
-// 중 search_queries 부분만 이식 — 구성요소 분해(Lv3)는 이번엔 생략).
-async function suggestSearchQueries(dishName: string, apiKey: string): Promise<{ queries: string[]; raw: string }> {
-  const raw = await callOpenAiJson(
-    apiKey,
-    "한국 구내식당 메뉴명을 식약처 식품영양성분DB에서 검색하기 좋은 형태로 " +
-      "바꿔주는 역할이야. 메뉴명에서 소스/곁들임 표기(*, 괄호 등)를 떼거나, " +
-      "핵심 재료명만 남기는 식으로 검색어 후보를 2~3개 만들어줘. " +
-      '반드시 JSON으로만 답해: {"queries": ["검색어1", "검색어2"]}',
-    dishName,
-  );
-  const parsed = JSON.parse(raw) as { queries: string[] };
-  return { queries: parsed.queries ?? [], raw };
+interface DishComponent {
+  name: string;
+  ratio: number; // 0~1, 이 재료가 전체 제공량 중 차지하는 비율
 }
 
-async function estimateDirectWithGpt(
-  dish: DishRef,
-  apiKey: string,
-): Promise<{ nutrition: DishNutrition; detail: string; raw: string }> {
-  const roleHint = roleHintFor(dish);
+interface DishStructure {
+  searchQueries: string[];
+  isComposite: boolean;
+  components: DishComponent[];
+}
+
+// GPT에게 "이 요리를 DB에서 어떻게 찾을 수 있을지"와 "복합 메뉴라면 어떤
+// 재료로 구성됐는지"를 한 번에 물어본다(원본 파이썬 estimate_gpt.
+// analyze_dish_structure와 동일 — Lv2/Lv3에서 공용으로 쓰는 GPT 호출을
+// 하나로 합쳐서 호출 횟수를 줄임). GPT는 여기서 숫자(칼로리 등)는 절대
+// 만들지 않고, 검색 힌트만 준다 — 실제 숫자는 항상 DB 조회로 채운다.
+async function analyzeDishStructure(dishName: string, apiKey: string): Promise<{ structure: DishStructure; raw: string }> {
   const raw = await callOpenAiJson(
     apiKey,
-    "너는 영양사야. 한국 구내식당 메뉴 1인분(1회 제공량) 기준 영양정보를 추정해줘. " +
-      roleHint +
-      ' 반드시 JSON으로만 답해: {"serving_g": 숫자, "carb_g": 숫자, "protein_g": 숫자, "fat_g": 숫자}',
-    dish.name,
+    "한국 구내식당 메뉴명을 식약처 식품영양성분DB에서 검색하기 좋게 분석하는 역할이야. " +
+      "숫자(칼로리 등)는 절대 만들지 마. 두 가지를 해줘: " +
+      "(1) 메뉴명에서 소스/곁들임 표기(*, 괄호 등)를 떼거나 핵심 재료명만 남기는 식으로 " +
+      "DB 검색어 후보를 2~3개 만들어줘. " +
+      "(2) 이 메뉴가 여러 재료가 섞인 복합 메뉴로 보이면(예: '고추참치덮밥'), " +
+      "주요 구성요소와 전체 중 차지하는 비율(합이 1이 되도록)을 나눠줘. " +
+      '반드시 JSON으로만 답해: {"search_queries": ["검색어1", "검색어2"], ' +
+      '"is_composite": true/false, "components": [{"name": "재료명", "ratio": 0.5}, ...]}',
+    dishName,
   );
-  const parsed = JSON.parse(raw) as { serving_g: number; carb_g: number; protein_g: number; fat_g: number };
-  const kcal = kcalFromMacros(parsed.carb_g, parsed.protein_g, parsed.fat_g);
+  const parsed = JSON.parse(raw) as {
+    search_queries?: string[];
+    is_composite?: boolean;
+    components?: DishComponent[];
+  };
   return {
-    nutrition: {
-      serving_g: parsed.serving_g,
-      carb_g: parsed.carb_g,
-      protein_g: parsed.protein_g,
-      fat_g: parsed.fat_g,
-      kcal,
-      source: "gpt_estimate",
-      reliability: "low",
-      outlier: isOutlier(dish.name, (kcal / parsed.serving_g) * 100),
+    structure: {
+      searchQueries: parsed.search_queries ?? [],
+      isComposite: parsed.is_composite ?? false,
+      components: parsed.components ?? [],
     },
-    detail: `[최후수단: GPT 직접추정] 역할 힌트: ${roleHint}`,
     raw,
   };
 }
 
-// 요리 하나의 영양정보를 Lv1(DB직접) -> Lv2(GPT유사검색+DB재조회) -> 최후수단(GPT직접추정)
+// 구성요소별 DB 영양정보(100g 기준)를 실제 그램수 기준으로 합산한다.
+// 1) 이 요리 전체의 예상 1회 제공량(휴리스틱)을 정한다
+// 2) 각 구성요소가 그 제공량 중 ratio만큼을 차지한다고 보고 실제 g을 계산
+// 3) 구성요소의 100g당 값 × (실제 g / 100)을 합산
+const COMPONENT_MATCH_THRESHOLD = 0.7; // 구성요소 중 이 비율 이상 DB에서 찾아야 신뢰
+
+async function tryComposite(
+  dish: DishRef,
+  components: DishComponent[],
+  dataGoKrKey: string,
+): Promise<{ nutrition: Omit<DishNutrition, "source" | "reliability">; matches: { name: string; db: Awaited<ReturnType<typeof lookupBest>>; ratio: number }[] } | null> {
+  const matches = await Promise.all(
+    components.map(async (c) => ({ name: c.name, ratio: c.ratio, db: await lookupBest(c.name, dataGoKrKey).catch(() => null) })),
+  );
+  const found = matches.filter((m) => m.db);
+  if (components.length === 0 || found.length / components.length < COMPONENT_MATCH_THRESHOLD) return null;
+
+  const totalServingG = Math.round(guessServingG(dish.name) * consumptionRatio(dish.name, dish.isMain));
+  let carb = 0, protein = 0, fat = 0;
+  for (const m of found) {
+    const componentG = totalServingG * m.ratio;
+    const factor = componentG / 100;
+    carb += m.db!.carbPer100g * factor;
+    protein += m.db!.proteinPer100g * factor;
+    fat += m.db!.fatPer100g * factor;
+  }
+  const kcal = kcalFromMacros(carb, protein, fat);
+  return {
+    nutrition: {
+      serving_g: totalServingG,
+      carb_g: Math.round(carb * 10) / 10,
+      protein_g: Math.round(protein * 10) / 10,
+      fat_g: Math.round(fat * 10) / 10,
+      kcal,
+      outlier: isOutlier(dish.name, (kcal / totalServingG) * 100),
+    },
+    matches,
+  };
+}
+
+// DB에도 없어서 GPT가 직접 추정하는 최후수단. GPT에게는 "표준 1인분(DB의
+// 1회 섭취참고량과 같은 개념)" 기준 100g당이 아니라 총량 값을 물어보고,
+// "이 사람이 실제 몇 g을 먹는지"는 DB 경로와 동일하게 코드가
+// consumptionRatio로 정한다 — 이제 "반찬이니 30~80g만 잡아라" 같은 걸
+// GPT의 그때그때 판단에 맡기지 않는다(2026-09-10 사용자 요구사항).
+async function estimateDirectWithGpt(
+  dish: DishRef,
+  apiKey: string,
+): Promise<{ nutrition: DishNutrition; detail: string; raw: string }> {
+  const raw = await callOpenAiJson(
+    apiKey,
+    "너는 영양사야. 한국 구내식당 메뉴의 '표준 1인분(1회 섭취참고량)' 기준 영양정보를 " +
+      "추정해줘 — 실제 몇 g을 먹는지는 신경 쓰지 말고, 이 음식점/급식에서 일반적으로 " +
+      "정의하는 표준 제공량 기준으로만 답해. " +
+      '반드시 JSON으로만 답해: {"serving_g": 숫자, "carb_g": 숫자, "protein_g": 숫자, "fat_g": 숫자}',
+    dish.name,
+  );
+  const parsed = JSON.parse(raw) as { serving_g: number; carb_g: number; protein_g: number; fat_g: number };
+
+  const ratio = consumptionRatio(dish.name, dish.isMain);
+  const servingG = Math.round(parsed.serving_g * ratio);
+  const carb_g = Math.round(parsed.carb_g * ratio * 10) / 10;
+  const protein_g = Math.round(parsed.protein_g * ratio * 10) / 10;
+  const fat_g = Math.round(parsed.fat_g * ratio * 10) / 10;
+  const kcal = kcalFromMacros(carb_g, protein_g, fat_g);
+
+  return {
+    nutrition: {
+      serving_g: servingG,
+      carb_g,
+      protein_g,
+      fat_g,
+      kcal,
+      source: "gpt_estimate",
+      reliability: "low",
+      outlier: isOutlier(dish.name, parsed.serving_g > 0 ? (kcalFromMacros(parsed.carb_g, parsed.protein_g, parsed.fat_g) / parsed.serving_g) * 100 : 0),
+    },
+    detail:
+      `[최후수단: GPT 직접추정] GPT가 준 표준 1인분(${parsed.serving_g}g)에 ` +
+      `consumptionRatio(${ratio}, isMain=${dish.isMain})를 적용해 실제 섭취량 ${servingG}g으로 환산`,
+    raw,
+  };
+}
+
+// 요리 하나의 영양정보를 Lv1(DB직접) -> Lv2(GPT유사검색+DB재조회) ->
+// Lv3(복합메뉴 구성요소 분해+DB조회 후 가중합산) -> 최후수단(GPT직접추정)
 // 순서로 계산한다. 앞 단계에서 성공하면 뒤 단계는 시도하지 않는다.
 async function estimateDish(
   dish: DishRef,
@@ -209,7 +287,7 @@ async function estimateDish(
       return null;
     });
     if (db) {
-      const { nutrition } = scaleDbResult(dish.name, db);
+      const { nutrition } = scaleDbResult(dish, db);
       const reliability: Reliability = db.similarity >= SIMILARITY_HIGH ? "high" : "medium";
       return {
         nutrition: { ...nutrition, source: "food_safety_db", reliability },
@@ -221,27 +299,46 @@ async function estimateDish(
       };
     }
 
-    // Lv2: GPT가 제안한 유사 검색어로 DB 재검색
+    // Lv2/Lv3 공용: GPT에게 검색어 후보 + 복합메뉴 구성요소를 한 번에 물어봄
     try {
-      const { queries, raw: gptRaw } = await suggestSearchQueries(dish.name, openaiApiKey);
-      for (const q of queries) {
+      const { structure, raw: gptRaw } = await analyzeDishStructure(dish.name, openaiApiKey);
+
+      // Lv2: 제안된 검색어로 DB 재검색
+      for (const q of structure.searchQueries) {
         const dbRetry = await lookupBest(q, dataGoKrKey).catch(() => null);
         if (dbRetry) {
-          const { nutrition } = scaleDbResult(dish.name, dbRetry);
+          const { nutrition } = scaleDbResult(dish, dbRetry);
           return {
             nutrition: { ...nutrition, source: "food_safety_db(유사검색)", reliability: "medium" },
             trace: {
               name: dish.name,
               detail:
                 `[Lv2: GPT 유사검색어 '${q}'로 DB 재검색] '${dish.name}' -> '${dbRetry.matchedName}' ` +
-                `(유사도 ${dbRetry.similarity}). GPT가 제안한 검색어 후보: ${JSON.stringify(queries)}`,
-              raw: `GPT 검색어 제안 원본: ${gptRaw} / DB 매칭 원본: ${JSON.stringify(dbRetry)}`,
+                `(유사도 ${dbRetry.similarity}). GPT가 제안한 검색어 후보: ${JSON.stringify(structure.searchQueries)}`,
+              raw: `GPT 구조분석 원본: ${gptRaw} / DB 매칭 원본: ${JSON.stringify(dbRetry)}`,
+            },
+          };
+        }
+      }
+
+      // Lv3: 복합 메뉴면 구성요소별로 DB 검색 -> 실제 그램수 기반 합산
+      if (structure.isComposite && structure.components.length > 0) {
+        const composite = await tryComposite(dish, structure.components, dataGoKrKey);
+        if (composite) {
+          return {
+            nutrition: { ...composite.nutrition, source: "food_safety_db(유사검색)", reliability: "medium" },
+            trace: {
+              name: dish.name,
+              detail:
+                `[Lv3: 구성요소 분해] '${dish.name}' -> ${structure.components.length}개 중 ` +
+                `${composite.matches.filter((m) => m.db).length}개 DB매칭, 비율 기반 합산`,
+              raw: `GPT 구조분석 원본: ${gptRaw} / 구성요소별 DB 매칭: ${JSON.stringify(composite.matches)}`,
             },
           };
         }
       }
     } catch (err) {
-      console.error(`Lv2 유사검색 실패: ${dish.name}`, err);
+      console.error(`Lv2/Lv3 실패: ${dish.name}`, err);
     }
   }
 

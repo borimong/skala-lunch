@@ -42,3 +42,18 @@ export function isOutlier(dishName: string, kcalPer100g: number): boolean {
   const ceiling = matchCategory(dishName)?.kcalCeiling ?? DEFAULT_KCAL_CEILING;
   return kcalPer100g > ceiling;
 }
+
+// 2026-09-10 사용자 규칙: DB/GPT는 "100g당" 또는 "1회 제공량" 기준 값만 줄 뿐,
+// "이 사람이 실제로 몇 g을 먹는지"는 알려주지 않는다. 그래서 이 비율은
+// 반드시 코드가 고정 규칙으로 정하고(AI의 그때그때 판단에 맡기지 않음),
+// DB조회 경로(Lv1~3)와 GPT최후수단 경로 전부에 동일하게 적용한다:
+//   - 메인메뉴(끼니 목록 앞쪽 1~2개, isMain=true): 1회 제공량의 90%
+//   - 밥류(메인이 아닌 경우의 예외): 1회 제공량의 40%
+//   - 그 외 반찬: 1회 제공량의 20%
+const RICE_KEYWORD = "밥";
+
+export function consumptionRatio(dishName: string, isMain: boolean): number {
+  if (isMain) return 0.9;
+  if (dishName.includes(RICE_KEYWORD)) return 0.4;
+  return 0.2;
+}
