@@ -100,7 +100,7 @@ export default {
           );
         }
         const rows = await env.DB.prepare(
-          "SELECT food_name, serving_g, carb_g, protein_g, fat_g, kcal FROM dish_nutrition WHERE date = ? AND meal_type = ?",
+          "SELECT food_name, serving_g, carb_g, protein_g, fat_g, kcal, source, reliability, outlier FROM dish_nutrition WHERE date = ? AND meal_type = ?",
         )
           .bind(date, mealType)
           .all<{
@@ -110,6 +110,9 @@ export default {
             protein_g: number;
             fat_g: number;
             kcal: number;
+            source: string;
+            reliability: string;
+            outlier: number;
           }>();
         const byName: Record<string, unknown> = {};
         for (const row of rows.results ?? []) {
@@ -119,9 +122,32 @@ export default {
             protein_g: row.protein_g,
             fat_g: row.fat_g,
             kcal: row.kcal,
+            source: row.source,
+            reliability: row.reliability,
+            outlier: !!row.outlier,
           };
         }
         return withCors(Response.json(byName));
+      }
+
+      // 관리자: 이 끼니를 계산할 때 GPT/DB랑 어떤 판단을 주고받았는지 원본 그대로.
+      // "쌀밥이 30g에 95kcal면 이상한데 DB에서 뭘로 매칭했는지 보고 싶다" 같은
+      // 확인용 — 일반 사용자용이 아니라서 관리자 인증을 요구한다.
+      if (pathname === "/api/nutrition/trace" && method === "GET") {
+        if (!requireAdmin(request, env)) return unauthorized();
+        const date = url.searchParams.get("date");
+        const mealType = url.searchParams.get("mealType");
+        if (!date || (mealType !== "lunch" && mealType !== "dinner")) {
+          return Response.json({ error: "date와 mealType(lunch|dinner)이 필요해요." }, { status: 400 });
+        }
+        const row = await env.DB.prepare(
+          "SELECT trace_md FROM nutrition_trace WHERE date = ? AND meal_type = ?",
+        )
+          .bind(date, mealType)
+          .first<{ trace_md: string }>();
+        return row
+          ? new Response(row.trace_md, { headers: { "Content-Type": "text/markdown; charset=utf-8" } })
+          : Response.json({ error: "추적 로그가 없어요(캐시에서 바로 읽혀서 이번엔 새로 계산 안 했을 수 있음)." }, { status: 404 });
       }
 
       // 관리자: 검토 대기(보류) 주 목록
@@ -202,7 +228,7 @@ export default {
         if (env.OPENAI_API_KEY) {
           const meals = collectMeals(parsed.data.days);
           try {
-            await ensureNutrition(env.DB, env.OPENAI_API_KEY, meals);
+            await ensureNutrition(env.DB, env.OPENAI_API_KEY, meals, env.DATA_GO_KR_API_KEY);
           } catch (err) {
             console.error("영양정보 계산 실패:", err);
           }

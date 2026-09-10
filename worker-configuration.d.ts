@@ -15,6 +15,10 @@ interface __BaseEnv_Env {
 	// 그 명령이 시크릿 타입을 전부 지워버려서 여기 수동으로 한 줄만 추가해둠 —
 	// .dev.vars를 만들고 다시 돌리면 자동으로 이 줄이 생성되면서 정리됨.
 	OPENAI_API_KEY?: string;
+	// wrangler secret put DATA_GO_KR_API_KEY 로 등록. 식약처 식품영양성분DB
+	// 조회(worker/nutritionDb.ts)에서 사용 — 원본 파이썬의 FOOD_SAFETY_API_KEY와
+	// 동일한 값(공공데이터포털에서 발급받은 data.go.kr 통합 인증키).
+	DATA_GO_KR_API_KEY?: string;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
