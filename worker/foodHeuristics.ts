@@ -1,12 +1,7 @@
-// 요리명 -> 이상치 여부를 순수 규칙(키워드 매칭)으로 판단.
-// AI 호출이 전혀 없어서 비용이 안 든다. 원본 파이썬 food_heuristics.py의
-// 카테고리별 kcal 상한선 표를 포팅한 것.
-//
-// 2026-09-10: 예전엔 "카테고리별 1회 제공량" + "메인/반찬 소비비율"을 코드가
-// 고정 숫자로 강제했었는데(guessServingG/consumptionRatio), GPT tool-calling
-// 에이전트 구조로 전환하면서 제공량 자체는 이제 GPT가 판단한다. 그래서 이
-// 파일엔 "그 판단 결과가 상식적인지 검증하는" isOutlier만 남김 — 값을 만드는
-// 게 아니라 사후 검증 역할로 축소.
+// 요리명 -> 이상치 여부를 순수 규칙(키워드 매칭)으로 판단. AI 호출 없음.
+// 예전엔 제공량도 이 파일이 고정 규칙으로 정했으나(guessServingG 등, 지금은
+// 삭제됨), 지금은 에이전트가 제공량을 정하고 이 파일은 "그 값이 상식적인지"
+// 사후 검증만 함. 히스토리는 인수인계.md "코딩기록" 참고.
 
 interface CategoryRule {
   keywords: string[];
@@ -28,11 +23,13 @@ const CATEGORY_RULES: CategoryRule[] = [
 
 const DEFAULT_KCAL_CEILING = 350;
 
+// 요리명에 키워드가 포함되면 그 카테고리로 판정. 위에서부터 순서대로 검사하니
+// CATEGORY_RULES 배열 순서가 우선순위(먼저 매칭되는 게 이김).
 function matchCategory(dishName: string): CategoryRule | null {
   for (const rule of CATEGORY_RULES) {
     if (rule.keywords.some((kw) => dishName.includes(kw))) return rule;
   }
-  return null;
+  return null; // 매칭 안 되면 DEFAULT_KCAL_CEILING 씀
 }
 
 // kcalPer100g: 100g 기준 칼로리. 이 값이 카테고리 상한선을 넘으면 이상치로 본다.

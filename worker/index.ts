@@ -115,7 +115,7 @@ export default {
             outlier: number;
             excluded_reason: string | null;
           }>();
-        const byName: Record<string, unknown> = {};
+        const byName: Record<string, unknown> = {}; // 요리명 -> 영양정보 (프론트가 이름으로 바로 찾아 쓰기 좋게)
         for (const row of rows.results ?? []) {
           byName[row.food_name] = {
             serving_g: row.serving_g,
@@ -125,7 +125,7 @@ export default {
             kcal: row.kcal,
             source: row.source,
             reliability: row.reliability,
-            outlier: !!row.outlier,
+            outlier: !!row.outlier, // D1엔 0/1로 저장돼있어서 boolean으로 변환
             excludedReason: row.excluded_reason ?? undefined,
           };
         }
@@ -208,7 +208,7 @@ export default {
           menu?: unknown;
           imageKey?: string;
         };
-        const parsed = weeklyMenuSchema.safeParse(payload.menu);
+        const parsed = weeklyMenuSchema.safeParse(payload.menu); // 스키마 검증(shared/menu.ts)
         if (!parsed.success) {
           return Response.json(
             {
@@ -218,19 +218,17 @@ export default {
             { status: 400 },
           );
         }
-        await saveWeek(env.DB, parsed.data, payload.imageKey);
+        await saveWeek(env.DB, parsed.data, payload.imageKey); // 메뉴 자체는 먼저 무조건 저장
 
-        // 발행 직후 딱 한 번, 이번 주 요리들의 영양정보를 계산해서 D1에
-        // 캐시해둔다(끼니당 Gemini 에이전트 호출 1번, 몇 초 걸릴 수 있음 —
-        // 백그라운드로 돌리려면 ctx.waitUntil 필요한데 지금은 fetch 핸들러에
-        // ctx를 안 받고 있어서 나중에 개선 여지로 남겨둠).
-        // GEMINI_NUTRITION_API_KEY는 사진→메뉴 추출용 GEMINI_API_KEY(김현수님
-        // 명의)와 별개 키다 — 우리가 새로 만드는 이 기능이 그분 무료 할당량을
-        // 몰래 갉아먹지 않도록 사용자 본인 명의로 새로 발급받은 키를 씀.
-        // 실패해도(예: 키 미설정, 일부 요리 추정 실패) 발행 자체는 이미
-        // 끝났으니 막지 않고 로그만 남긴다 — 다음 발행 때 재시도됨.
+        // 발행 직후 딱 한 번, payload에 담긴 모든 날짜의 영양정보를 계산해서 D1에 캐시.
+        // 주의: parsed.data.days에 여러 날이 들어있으면 그 전부를 처리함 — 하루만
+        // 테스트하고 싶으면 호출 전에 payload.menu.days를 그 하루로 잘라서 보낼 것
+        // (안 그러면 Gemini 무료 쿼터를 순식간에 다 씀, 인수인계.md "알려진 문제" 참고).
+        // GEMINI_NUTRITION_API_KEY는 사진→메뉴 추출용 GEMINI_API_KEY(김현수님 명의)와
+        // 별개 키 — 그분 무료 할당량을 갉아먹지 않게 사용자 본인 명의 키를 씀.
+        // 실패해도 발행 자체는 이미 끝났으니 막지 않고 로그만 남김(다음 발행 때 재시도).
         if (env.GEMINI_NUTRITION_API_KEY) {
-          const meals = collectMeals(parsed.data.days);
+          const meals = collectMeals(parsed.data.days); // WeeklyMenu -> 끼니 단위 배열로 평탄화
           try {
             await ensureNutrition(env.DB, env.GEMINI_NUTRITION_API_KEY, meals, env.DATA_GO_KR_API_KEY);
           } catch (err) {

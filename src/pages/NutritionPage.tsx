@@ -16,11 +16,13 @@ const RELIABILITY_BADGE: Record<string, string> = {
 };
 
 function SourceBadge({ n }: { n?: DishNutrition }) {
-  if (!n) return <span className="text-gray-300">—</span>;
-  if (n.outlier) return <span className="text-amber-600">⚠️ 이상치의심</span>;
+  if (!n) return <span className="text-gray-300">—</span>; // 아직 계산 안 됐거나 실패한 요리
+  if (n.outlier) return <span className="text-amber-600">⚠️ 이상치의심</span>; // 이상치 배지가 출처 배지보다 우선
   return <span>{RELIABILITY_BADGE[n.reliability] ?? n.source}</span>;
 }
 
+// 메뉴 목록(name/isMain)에 API에서 받은 영양정보를 합친 화면용 행 하나.
+// 아직 계산 안 된 요리는 DishNutrition 필드가 전부 undefined로 옴(Partial).
 type MealRow = { name: string; isMain: boolean } & Partial<DishNutrition>;
 
 // 다른 메뉴(예: 국밥)에 이미 포함됐다고 에이전트가 판단한 요리는
@@ -43,11 +45,11 @@ function MealTable({
   date: string;
   mealType: "lunch" | "dinner";
 }) {
-  const [nutrition, setNutrition] = useState<Record<string, DishNutrition>>({});
+  const [nutrition, setNutrition] = useState<Record<string, DishNutrition>>({}); // 요리명 -> 영양정보
 
   useEffect(() => {
     if (!meal) return;
-    let alive = true;
+    let alive = true; // 언마운트 후 setState 방지
     fetchNutrition(date, mealType).then((data) => {
       if (alive) setNutrition(data);
     });
@@ -58,6 +60,7 @@ function MealTable({
 
   if (!meal || meal.dishes.length === 0) return null;
 
+  // 메뉴 순서(원본 발행 순서) 그대로 유지하면서 영양정보만 이름으로 매칭.
   const rows: MealRow[] = meal.dishes.map((d) => ({
     name: d.name,
     isMain: d.isMain,
@@ -128,6 +131,7 @@ function MealTable({
 
 export default function NutritionPage() {
   const { date } = useParams<{ date: string }>();
+  // day: undefined=로딩 중, null=해당 날짜 메뉴 없음, Day=정상 로드됨
   const [day, setDay] = useState<Day | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 

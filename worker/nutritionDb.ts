@@ -81,17 +81,19 @@ export async function lookupBest(
     body?: { items?: ApiItem[] | { item: ApiItem[] } };
   };
   const rawItems = data.body?.items;
+  // API가 결과 1건일 땐 배열이 아니라 객체로 오는 경우가 있어서 방어적으로 처리.
   const items: ApiItem[] = Array.isArray(rawItems)
     ? rawItems
     : (rawItems?.item ?? []);
   if (items.length === 0) return null;
 
+  // 후보 중 검색어와 이름이 제일 비슷한 것 하나만 채택.
   let best: { item: ApiItem; score: number } | null = null;
   for (const item of items) {
     const score = similarity(query, item.FOOD_NM_KR);
     if (!best || score > best.score) best = { item, score };
   }
-  if (!best || best.score < SIMILARITY_LOW) return null;
+  if (!best || best.score < SIMILARITY_LOW) return null; // 제일 나은 것도 너무 안 비슷하면 매칭 실패로 취급
 
   return {
     matchedName: best.item.FOOD_NM_KR,
