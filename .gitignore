@@ -7,3 +7,9 @@ dist
 logs
 *.log
 seed.sql
+
+# 개인 작업 메모(AI 세션용) — 팀 저장소에는 안 올림
+인수인계.md
+과거_인수인계.md
+코드보는법.md
+nutrition_trace_*.md

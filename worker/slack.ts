@@ -5,10 +5,16 @@ import { getPublishedWeek } from "./menus";
 type SlackPayload = { text: string; blocks: Record<string, unknown>[] };
 type NotifyResult = { sent: boolean; reason?: string; payload?: SlackPayload };
 
+// 요리명에 '*'가 들어있으면(예: "샐러드*드레싱*토핑") Slack의 볼드 마크다운(*텍스트*)과
+// 충돌해서 렌더링이 깨지므로, 표시용으로만 가운뎃점으로 바꿔치기한다.
+function escapeDishName(name: string): string {
+  return name.replace(/\*/g, "·");
+}
+
 function formatMeal(meal?: Meal): string {
   if (!meal || meal.dishes.length === 0) return "";
-  const mains = meal.dishes.filter((d) => d.isMain).map((d) => `*${d.name}*`);
-  const sides = meal.dishes.filter((d) => !d.isMain).map((d) => d.name);
+  const mains = meal.dishes.filter((d) => d.isMain).map((d) => `*${escapeDishName(d.name)}*`);
+  const sides = meal.dishes.filter((d) => !d.isMain).map((d) => escapeDishName(d.name));
   return [...mains, ...sides].join(" · ");
 }
 
@@ -47,6 +53,10 @@ export function buildPayload(day: Day, publicUrl: string): SlackPayload {
   context.push(
     "<https://skalacafe.netlify.app/|사내카페 주문하기(by 5반 김태관님)>",
   );
+  // 끼니별 영양정보 상세페이지 링크. PUBLIC_URL 끝에 슬래시가 있어도/없어도
+  // 안전하게 이어붙이려고 잘라내고 다시 붙임.
+  const nutritionUrl = `${publicUrl.replace(/\/$/, "")}/nutrition/${day.date}`;
+  context.push(`<${nutritionUrl}|칼로리/영양정보 자세히 보기(by 5반 유길선님)>`);
   blocks.push({
     type: "context",
     elements: [{ type: "mrkdwn", text: context.join("  ·  ") }],
