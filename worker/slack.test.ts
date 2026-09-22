@@ -41,4 +41,36 @@ describe("buildPayload — 슬랙 context 링크", () => {
     expect(idxMenu).toBeGreaterThanOrEqual(0);
     expect(idxCafe).toBeGreaterThan(idxMenu); // 식단표 링크 다음(옆)에
   });
+
+  it("영양정보 상세페이지 링크가 날짜와 함께 추가된다", () => {
+    expect(text).toContain(
+      "<https://skala-lunch.example/nutrition/2026-07-27|칼로리/영양정보 자세히 보기(by 5반 유길선님)>",
+    );
+  });
+});
+
+describe("buildPayload — 요리명에 '*'가 들어있어도 볼드 마크다운이 안 깨진다", () => {
+  const dayWithAsterisk: Day = {
+    date: "2026-07-27",
+    weekday: "월",
+    lunch: {
+      dishes: [
+        { name: "샐러드*드레싱*토핑", isMain: true },
+        { name: "핫도그*머스타드*케찹", isMain: false },
+      ],
+    },
+    dessert: undefined,
+  };
+  const payload = buildPayload(dayWithAsterisk, "https://skala-lunch.example/");
+  const lunchSection = payload.blocks.find(
+    (b) => b.type === "section" && (b.text as { text: string }).text.includes("중식"),
+  ) as { text: { text: string } };
+
+  it("메인메뉴의 '*'는 가운뎃점으로 바뀌고 볼드는 앞뒤에만 붙는다", () => {
+    expect(lunchSection.text.text).toContain("*샐러드·드레싱·토핑*");
+  });
+
+  it("반찬의 '*'도 가운뎃점으로 바뀐다", () => {
+    expect(lunchSection.text.text).toContain("핫도그·머스타드·케찹");
+  });
 });
