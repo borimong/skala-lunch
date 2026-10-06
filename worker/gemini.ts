@@ -67,7 +67,7 @@ function buildPrompt(weekStart: string): string {
 반드시 제공된 JSON 스키마에 맞춰 한국어로만 출력하세요.`;
 }
 
-function toBase64(data: ArrayBuffer): string {
+export function toBase64(data: ArrayBuffer): string {
   const bytes = new Uint8Array(data);
   let binary = "";
   const chunk = 0x8000;
@@ -83,12 +83,14 @@ interface GeminiResponse {
   }[];
 }
 
-export async function extractMenu(
+/** 프롬프트와 이미지를 보내 responseSchema에 맞는 JSON을 받는다(스키마 검증은 호출측). */
+export async function generateJsonFromImage(
   env: Env,
+  prompt: string,
   image: ArrayBuffer,
   mimeType: string,
-  weekStart: string,
-): Promise<WeeklyMenu> {
+  responseSchema: unknown,
+): Promise<unknown> {
   if (!env.GEMINI_API_KEY) {
     throw new Error(
       "GEMINI_API_KEY가 설정되지 않았어요. .dev.vars 또는 시크릿을 확인해 주세요.",
@@ -102,7 +104,7 @@ export async function extractMenu(
     contents: [
       {
         parts: [
-          { text: buildPrompt(weekStart) },
+          { text: prompt },
           {
             inline_data: {
               mime_type: mimeType || "image/jpeg",
@@ -141,12 +143,26 @@ export async function extractMenu(
     throw new Error("Gemini 응답에서 결과 텍스트를 찾지 못했어요.");
   }
 
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    return JSON.parse(text);
   } catch {
     throw new Error("Gemini가 유효한 JSON을 반환하지 않았어요.");
   }
+}
+
+export async function extractMenu(
+  env: Env,
+  image: ArrayBuffer,
+  mimeType: string,
+  weekStart: string,
+): Promise<WeeklyMenu> {
+  const parsed = await generateJsonFromImage(
+    env,
+    buildPrompt(weekStart),
+    image,
+    mimeType,
+    responseSchema,
+  );
 
   // 날짜 범위는 관리자가 지정한 월요일 기준으로 보정 (모델 계산보다 신뢰)
   if (parsed && typeof parsed === "object") {

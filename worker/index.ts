@@ -5,6 +5,13 @@ import { swaggerUiHtml } from "./docs";
 import { extractMenu } from "./gemini";
 import { ingestWeeklyExcel } from "./ingest";
 import {
+  getInnovalleyRow,
+  notifyInnovalleyToday,
+  runInnovalleyCron,
+  saveInnovalleyRow,
+  syncInnovalley,
+} from "./innovalley";
+import {
   deletePendingDraft,
   getLatestWeek,
   getPendingDrafts,
@@ -15,6 +22,9 @@ import {
 import { openApiSpec } from "./openapi";
 import { notifyToday } from "./slack";
 import { buildTodayResponse, todayKST } from "./today";
+import { innovalleyWeekSchema } from "../shared/innovalley";
+
+const SKALA_NOTIFY_CRON = "0 23 * * *";
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -205,6 +215,73 @@ export default {
         return Response.json(result);
       }
 
+      // 관리자: 이노밸리 이번 주(?date 기준) 메뉴 수집. force=1이면 발행/보류 여부와 상관없이 다시 수집.
+      if (pathname === "/api/innovalley/sync" && method === "POST") {
+        if (!requireAdmin(request, env)) return unauthorized();
+        const date = url.searchParams.get("date") ?? todayKST();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          return Response.json(
+            { error: "date는 YYYY-MM-DD 형식이어야 해요." },
+            { status: 400 },
+          );
+        }
+        const force = url.searchParams.get("force") === "1";
+        return Response.json(await syncInnovalley(env, date, { force }));
+      }
+
+      // 관리자: 이노밸리 중식 슬랙 발송(?date로 특정 날짜, force=1이면 이미 보낸 날도 재발송)
+      if (pathname === "/api/innovalley/notify" && method === "POST") {
+        if (!requireAdmin(request, env)) return unauthorized();
+        const date = url.searchParams.get("date") ?? undefined;
+        if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          return Response.json(
+            { error: "date는 YYYY-MM-DD 형식이어야 해요." },
+            { status: 400 },
+          );
+        }
+        const force = url.searchParams.get("force") === "1";
+        return Response.json(await notifyInnovalleyToday(env, date, { force }));
+      }
+
+      // 관리자: 이노밸리 특정 주 조회(보류 사유 확인용, 상태 무관)
+      const innovalleyWeek = pathname.match(
+        /^\/api\/innovalley\/(\d{4}-\d{2}-\d{2})$/,
+      );
+      if (innovalleyWeek && method === "GET") {
+        if (!requireAdmin(request, env)) return unauthorized();
+        const row = await getInnovalleyRow(env.DB, innovalleyWeek[1]);
+        return row
+          ? Response.json(row)
+          : Response.json({ error: "not found" }, { status: 404 });
+      }
+
+      // 관리자: 보류된 이노밸리 주를 직접 고쳐서 발행(body: { menu })
+      if (innovalleyWeek && method === "PUT") {
+        if (!requireAdmin(request, env)) return unauthorized();
+        const payload = (await request.json()) as { menu?: unknown };
+        const parsed = innovalleyWeekSchema.safeParse(payload.menu);
+        if (!parsed.success || parsed.data.weekStart !== innovalleyWeek[1]) {
+          return Response.json(
+            {
+              error: "식단 형식이 올바르지 않거나 주 시작일이 경로와 달라요.",
+              detail: parsed.success ? undefined : parsed.error.issues,
+            },
+            { status: 400 },
+          );
+        }
+        const row = await getInnovalleyRow(env.DB, innovalleyWeek[1]);
+        await saveInnovalleyRow(env.DB, {
+          weekStart: parsed.data.weekStart,
+          postId: row?.postId ?? "manual",
+          postUrl: row?.postUrl ?? "",
+          imageUrl: row?.imageUrl ?? "",
+          menu: parsed.data,
+          status: "published",
+          reasons: [],
+        });
+        return Response.json({ ok: true });
+      }
+
       if (pathname.startsWith("/api/")) {
         return Response.json({ error: "Not found" }, { status: 404 });
       }
@@ -218,7 +295,11 @@ export default {
     return env.ASSETS.fetch(request);
   },
 
-  async scheduled(_controller, env, ctx): Promise<void> {
-    ctx.waitUntil(notifyToday(env));
+  async scheduled(controller, env, ctx): Promise<void> {
+    if (controller.cron === SKALA_NOTIFY_CRON) {
+      ctx.waitUntil(notifyToday(env));
+    } else {
+      ctx.waitUntil(runInnovalleyCron(env));
+    }
   },
 } satisfies ExportedHandler<Env>;
