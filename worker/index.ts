@@ -5,6 +5,7 @@ import { swaggerUiHtml } from "./docs";
 import { extractMenu } from "./gemini";
 import { ingestWeeklyExcel } from "./ingest";
 import {
+  deletePendingDraft,
   getLatestWeek,
   getPendingDrafts,
   getPublishedWeek,
@@ -77,11 +78,21 @@ export default {
           : withCors(Response.json({ error: "no menu" }, { status: 404 }));
       }
 
-      // 관리자: 검토 대기(보류) 주 목록
+      // 관리자: 검토 대기(보류) 초안 목록 — 각 항목에 보류 사유 포함
       if (pathname === "/api/menus/pending" && method === "GET") {
         if (!requireAdmin(request, env)) return unauthorized();
         const drafts = await getPendingDrafts(env.DB);
         return Response.json({ drafts });
+      }
+
+      // 관리자: 보류 초안 무시(삭제)
+      const dismissMatch = pathname.match(
+        /^\/api\/menus\/pending\/(\d{4}-\d{2}-\d{2})$/,
+      );
+      if (dismissMatch && method === "DELETE") {
+        if (!requireAdmin(request, env)) return unauthorized();
+        await deletePendingDraft(env.DB, dismissMatch[1]);
+        return Response.json({ ok: true });
       }
 
       // 관리자: 특정 주 초안/데이터 로드(검토 화면용, 상태 무관)
@@ -132,6 +143,7 @@ export default {
         const payload = (await request.json()) as {
           menu?: unknown;
           imageKey?: string;
+          dismissDraft?: string; // 발행과 함께 정리할 원본 보류 초안의 week_start(선택)
         };
         const parsed = weeklyMenuSchema.safeParse(payload.menu);
         if (!parsed.success) {
@@ -144,6 +156,13 @@ export default {
           );
         }
         await saveWeek(env.DB, parsed.data, payload.imageKey);
+        // 보류 초안에서 넘어온 발행이면(주 시작일을 고쳤을 수 있으므로 원본 키로) 해당 초안 정리.
+        if (
+          typeof payload.dismissDraft === "string" &&
+          /^\d{4}-\d{2}-\d{2}$/.test(payload.dismissDraft)
+        ) {
+          await deletePendingDraft(env.DB, payload.dismissDraft);
+        }
         return Response.json({ ok: true });
       }
 

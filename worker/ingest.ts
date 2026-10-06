@@ -93,7 +93,7 @@ export async function ingestWeeklyExcel(
   const summary = summarize(menu);
 
   if (!v.ok) {
-    await saveDraft(env.DB, menu);
+    await saveDraft(env.DB, menu, v.hardErrors);
     return {
       status: "held",
       reasons: v.hardErrors,
@@ -109,10 +109,11 @@ export async function ingestWeeklyExcel(
     try {
       const cross = await verifyWithGemini(env, excelGridText(bytes), menu);
       if (!cross.ok && cross.discrepancies.length > 0) {
-        await saveDraft(env.DB, menu);
+        const reasons = cross.discrepancies.map((d) => `AI 교차검증: ${d}`);
+        await saveDraft(env.DB, menu, reasons);
         return {
           status: "held",
-          reasons: cross.discrepancies.map((d) => `AI 교차검증: ${d}`),
+          reasons,
           warnings: v.softWarnings,
           summary,
           weekStart: menu.weekStart,

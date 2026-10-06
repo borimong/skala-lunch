@@ -1,20 +1,38 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { WeeklyMenu } from "../../shared/menu";
-import { fetchPendingDrafts } from "../lib/adminApi";
+import { type PendingDraft, dismissDraft, fetchPendingDrafts } from "../lib/adminApi";
 
 export default function AdminPendingPage() {
   const navigate = useNavigate();
-  const [drafts, setDrafts] = useState<WeeklyMenu[] | null>(null);
+  const [drafts, setDrafts] = useState<PendingDraft[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () =>
     fetchPendingDrafts()
       .then(setDrafts)
       .catch((e) =>
         setError(e instanceof Error ? e.message : "목록을 불러오지 못했어요."),
       );
+
+  useEffect(() => {
+    load();
   }, []);
+
+  async function onDismiss(weekStart: string) {
+    if (!confirm(`${weekStart} 보류 초안을 목록에서 지울까요?`)) return;
+    setBusy(weekStart);
+    setError(null);
+    try {
+      await dismissDraft(weekStart);
+      setDrafts((ds) => (ds ?? []).filter((d) => d.menu.weekStart !== weekStart));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "삭제에 실패했어요.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -26,7 +44,8 @@ export default function AdminPendingPage() {
           </Link>
         </div>
         <p className="mb-6 text-xs text-gray-500">
-          자동 검증에서 이상이 감지돼 보류된 주입니다. 확인·수정 후 발행하세요.
+          자동 검증에서 이상이 감지돼 보류된 주입니다. 사유를 확인하고, 검토 화면에서
+          필요하면 주 시작일까지 고쳐 발행하세요.
         </p>
 
         {error && (
@@ -47,25 +66,51 @@ export default function AdminPendingPage() {
 
         {drafts && drafts.length > 0 && (
           <ul className="space-y-3">
-            {drafts.map((menu) => (
+            {drafts.map(({ menu, reasons }) => (
               <li
                 key={menu.weekStart}
-                className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4"
+                className="rounded-xl border border-amber-200 bg-amber-50 p-4"
               >
-                <div className="min-w-0">
-                  <div className="font-semibold text-gray-900">
-                    {menu.weekStart} ~ {menu.weekEnd}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-gray-900">
+                      {menu.weekStart} ~ {menu.weekEnd}
+                    </div>
+                    <div className="truncate text-xs text-gray-500">
+                      {mainsSummary(menu)}
+                    </div>
                   </div>
-                  <div className="truncate text-xs text-gray-500">
-                    {mainsSummary(menu)}
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      onClick={() => onDismiss(menu.weekStart)}
+                      disabled={busy === menu.weekStart}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      무시
+                    </button>
+                    <button
+                      onClick={() =>
+                        navigate("/admin/review", {
+                          state: { menu, originalWeekStart: menu.weekStart },
+                        })
+                      }
+                      className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+                    >
+                      검토하기
+                    </button>
                   </div>
                 </div>
-                <button
-                  onClick={() => navigate("/admin/review", { state: { menu } })}
-                  className="shrink-0 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
-                >
-                  검토하기
-                </button>
+
+                {reasons.length > 0 && (
+                  <ul className="mt-3 space-y-1 border-t border-amber-200 pt-3">
+                    {reasons.map((r, i) => (
+                      <li key={i} className="flex gap-1.5 text-xs text-amber-800">
+                        <span aria-hidden>⚠</span>
+                        <span>{r}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>
