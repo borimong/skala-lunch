@@ -5,10 +5,28 @@ import { getPublishedWeek } from "./menus";
 type SlackPayload = { text: string; blocks: Record<string, unknown>[] };
 type NotifyResult = { sent: boolean; reason?: string; payload?: SlackPayload };
 
+// 슬랙 mrkdwn은 백슬래시 이스케이프(\*)를 지원하지 않는다.
+// 메뉴명 안의 '*'(예: "새우까스*스리라차마요소스")가 볼드 구분자 '*...*'와
+// 충돌해 볼드가 깨지므로 '&'로 치환한다.
+// '&','<','>'는 슬랙 제어문자라 HTML 엔티티로 이스케이프해야 화면에 문자
+// 그대로(예: '&') 렌더된다. '*'→'&' 치환을 먼저 한 뒤 이스케이프하므로,
+// 새로 넣은 '&'도 '&amp;'가 되어 '&'로 표시된다.
+function escapeMrkdwn(text: string): string {
+  return text
+    .replace(/\*/g, "&")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function formatMeal(meal?: Meal): string {
   if (!meal || meal.dishes.length === 0) return "";
-  const mains = meal.dishes.filter((d) => d.isMain).map((d) => `*${d.name}*`);
-  const sides = meal.dishes.filter((d) => !d.isMain).map((d) => d.name);
+  const mains = meal.dishes
+    .filter((d) => d.isMain)
+    .map((d) => `*${escapeMrkdwn(d.name)}*`);
+  const sides = meal.dishes
+    .filter((d) => !d.isMain)
+    .map((d) => escapeMrkdwn(d.name));
   return [...mains, ...sides].join(" · ");
 }
 
