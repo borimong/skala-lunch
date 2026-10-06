@@ -1,5 +1,6 @@
 import type { Day, Meal } from "../shared/menu";
 import { mondayOf } from "../shared/menu";
+import { lunchScheduleFor } from "../shared/lunchSchedule";
 import { getPublishedWeek } from "./menus";
 
 type SlackPayload = { text: string; blocks: Record<string, unknown>[] };
@@ -56,6 +57,19 @@ export function buildPayload(day: Day, publicUrl: string): SlackPayload {
     blocks.push({
       type: "section",
       text: { type: "mrkdwn", text: `*🍲 석식*\n${dinner}` },
+    });
+  }
+
+  const schedule = lunchScheduleFor(day.date);
+  if (schedule && lunch) {
+    const slots = schedule.map(
+      (s) => `${s.time} ${s.classes.map((c) => `${c}반`).join(", ")}`,
+    );
+    blocks.push({
+      type: "context",
+      elements: [
+        { type: "mrkdwn", text: `⏰ 점심 순서  ${slots.join("  ·  ")}` },
+      ],
     });
   }
 

@@ -15,10 +15,16 @@ const day: Day = {
   dessert: "결명자차",
 };
 
+function contextTexts(payload: ReturnType<typeof buildPayload>): string[] {
+  return payload.blocks
+    .filter((b) => b.type === "context")
+    .map((b) => (b.elements as { text: string }[])[0]?.text ?? "");
+}
+
+// 링크가 모인 맨 아래 context 줄
 function contextText(payload: ReturnType<typeof buildPayload>): string {
-  const ctx = payload.blocks.find((b) => b.type === "context");
-  const elements = ctx?.elements as { text: string }[] | undefined;
-  return elements?.[0]?.text ?? "";
+  const texts = contextTexts(payload);
+  return texts[texts.length - 1] ?? "";
 }
 
 function sectionText(
@@ -81,5 +87,30 @@ describe("buildPayload — 메뉴명 '*' 볼드 깨짐 방지", () => {
 
   it("볼드 구분자 '*' 개수가 짝수라 볼드가 안 깨진다", () => {
     expect((t.match(/\*/g) ?? []).length % 2).toBe(0);
+  });
+});
+
+describe("buildPayload — 반별 점심 순서 안내", () => {
+  const onRotation: Day = { ...day, date: "2026-10-06", weekday: "화" };
+
+  it("운영 기간 날짜면 링크 줄 위에 작은 글씨로 순서가 붙는다", () => {
+    const texts = contextTexts(buildPayload(onRotation, "https://x/"));
+    expect(texts).toHaveLength(2);
+    expect(texts[0]).toBe(
+      "⏰ 점심 순서  11:50 2반  ·  12:00 3반, 4반  ·  12:10 5반, 1반",
+    );
+    expect(texts[1]).toContain("전체 식단표 보기");
+  });
+
+  it("운영 기간 밖이면 순서 줄이 없다", () => {
+    const texts = contextTexts(buildPayload(day, "https://x/"));
+    expect(texts).toHaveLength(1);
+    expect(texts[0]).not.toContain("점심 순서");
+  });
+
+  it("중식이 없는 날엔 순서 줄을 생략한다", () => {
+    const dinnerOnly: Day = { ...onRotation, lunch: undefined };
+    const texts = contextTexts(buildPayload(dinnerOnly, "https://x/"));
+    expect(texts.some((t) => t.includes("점심 순서"))).toBe(false);
   });
 });
