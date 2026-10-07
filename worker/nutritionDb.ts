@@ -5,7 +5,7 @@
 //   - 검색 파라미터는 FOOD_NM(무시됨)이 아니라 FOOD_NM_KR이어야 함
 //   - 인증은 쿼리스트링(serviceKey)으로 — 이 방식이라 슬래시 인코딩 문제가 없음
 //     (예전에 시도했던 openapi.foodsafetykorea.go.kr는 발급키에 우연히 '/'가
-//     섞여서 경로 기반 인증과 충돌해 포기했었음, CHANGELOG 참고)
+//     섞여서 경로 기반 인증과 충돌해 포기했었음)
 
 export interface DbLookupResult {
   matchedName: string;
@@ -34,8 +34,7 @@ function similarity(a: string, b: string): number {
   const setA = bigrams(a);
   const setB = bigrams(b);
   if (setA.size === 0 || setB.size === 0) return 0;
-  let overlap = 0;
-  for (const bg of setA) if (setB.has(bg)) overlap++;
+  const overlap = [...setA].filter((bg) => setB.has(bg)).length;
   return (2 * overlap) / (setA.size + setB.size);
 }
 
@@ -72,9 +71,11 @@ export async function lookupBest(
   url.searchParams.set("type", "json");
 
   const resp = await fetch(url.toString());
+  // "못 찾음"(null)과 구분해야 캐시에 잘못 저장되지 않으니, 조회 자체의 실패는 에러로 던진다.
   if (!resp.ok) {
-    console.error(`식약처 DB 조회 실패 (${resp.status}): ${await resp.text()}`);
-    return null;
+    throw new Error(
+      `식약처 DB 조회 실패 (${resp.status}): ${await resp.text()}`,
+    );
   }
 
   const data = (await resp.json()) as {
@@ -86,12 +87,11 @@ export async function lookupBest(
     : (rawItems?.item ?? []);
   if (items.length === 0) return null;
 
-  let best: { item: ApiItem; score: number } | null = null;
-  for (const item of items) {
-    const score = similarity(query, item.FOOD_NM_KR);
-    if (!best || score > best.score) best = { item, score };
-  }
-  if (!best || best.score < SIMILARITY_LOW) return null;
+  // 후보마다 유사도를 매기고 가장 높은 하나를 고른다(items는 위에서 비어 있지 않음을 확인함).
+  const best = items
+    .map((item) => ({ item, score: similarity(query, item.FOOD_NM_KR) }))
+    .reduce((a, b) => (b.score > a.score ? b : a));
+  if (best.score < SIMILARITY_LOW) return null;
 
   return {
     matchedName: best.item.FOOD_NM_KR,
@@ -101,4 +101,28 @@ export async function lookupBest(
     carbPer100g: Number(best.item.AMT_NUM6) || 0,
     similarity: Math.round(best.score * 100) / 100,
   };
+}
+
+// 같은 검색어는 D1(food_db_cache)에 저장된 결과를 재사용한다. 못 찾음(null)도 저장한다.
+// lookupBest가 에러를 던지면(네트워크·API 오류) 저장하지 않으니 다음에 다시 조회된다.
+export async function lookupCached(
+  db: D1Database,
+  query: string,
+  serviceKey: string,
+): Promise<DbLookupResult | null> {
+  const row = await db
+    .prepare("SELECT result FROM food_db_cache WHERE query = ?")
+    .bind(query)
+    .first<{ result: string | null }>();
+  if (row)
+    return row.result ? (JSON.parse(row.result) as DbLookupResult) : null;
+
+  const found = await lookupBest(query, serviceKey);
+  await db
+    .prepare(
+      "INSERT OR REPLACE INTO food_db_cache (query, result, updated_at) VALUES (?, ?, datetime('now'))",
+    )
+    .bind(query, found ? JSON.stringify(found) : null)
+    .run();
+  return found;
 }

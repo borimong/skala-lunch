@@ -1,7 +1,7 @@
 // 요리명 -> 이상치 여부를 순수 규칙(키워드 매칭)으로 판단. AI 호출 없음.
 // 예전엔 제공량도 이 파일이 고정 규칙으로 정했으나(guessServingG 등, 지금은
 // 삭제됨), 지금은 에이전트가 제공량을 정하고 이 파일은 "그 값이 상식적인지"
-// 사후 검증만 함. 히스토리는 인수인계.md "코딩기록" 참고.
+// 사후 검증만 함.
 
 interface CategoryRule {
   keywords: string[];
@@ -23,11 +23,9 @@ const CATEGORY_RULES: CategoryRule[] = [
 
 const DEFAULT_KCAL_CEILING = 350;
 
-function matchCategory(dishName: string): CategoryRule | null {
-  for (const rule of CATEGORY_RULES) {
-    if (rule.keywords.some((kw) => dishName.includes(kw))) return rule;
-  }
-  return null;
+// 위에서부터 처음 맞는 규칙 하나(순서가 우선순위 — "국밥"이 "밥"보다 먼저 걸리게).
+function matchCategory(dishName: string): CategoryRule | undefined {
+  return CATEGORY_RULES.find((rule) => rule.keywords.some((kw) => dishName.includes(kw)));
 }
 
 // kcalPer100g: 100g 기준 칼로리. 이 값이 카테고리 상한선을 넘으면 이상치로 본다.

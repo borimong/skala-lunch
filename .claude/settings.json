@@ -1,5 +1,0 @@
-{
-  "permissions": {
-    "deny": ["Read(.dev.vars)", "Read(**/.dev.vars)"]
-  }
-}

@@ -8,6 +8,7 @@ import type { DishNutrition } from "../lib/api";
 // 탄단지/칼로리/출처 표 + 합계 행). 원본 파이썬 프로젝트(skala-meal-macros)의
 // generate_page.py가 만들던 페이지와 같은 골격이다. 2026-09-09에 DB조회
 // 경로를 다시 넣으면서 출처/이상치 배지도 같이 복원함.
+// DishNutritionㅇ
 
 const RELIABILITY_BADGE: Record<string, string> = {
   high: "🟢 DB",
@@ -22,6 +23,11 @@ function SourceBadge({ n }: { n?: DishNutrition }) {
 }
 
 type MealRow = { name: string; isMain: boolean } & Partial<DishNutrition>;
+
+// 영양정보가 아직 없는 행(Partial)인지 타입 단언(as) 대신 실제로 검사해서 좁힌다.
+function hasNutrition(r: MealRow): r is MealRow & DishNutrition {
+  return r.serving_g != null && r.kcal != null && r.reliability != null;
+}
 
 // 사용자가 1회 제공량을 직접 바꾸면, 서버 재계산(Gemini 호출) 없이 프론트에서
 // 바로 비율 계산: 탄단지는 제공량 비율만큼 같이 늘리고/줄이고, kcal은 그
@@ -56,20 +62,32 @@ function MealTable({
   date: string;
   mealType: "lunch" | "dinner";
 }) {
-  const [nutrition, setNutrition] = useState<Record<string, DishNutrition>>({});
+  // 받아온 결과를 "어느 날짜·끼니 것인지(key)"와 함께 둔다. key가 지금과 다르면 아직 받는 중.
+  const key = `${date}|${mealType}`;
+  const [loaded, setLoaded] = useState<{ key: string; data: Record<string, DishNutrition> | null }>();
   // 사용자가 직접 입력한 제공량(요리명 -> g). 페이지 새로고침하면 초기화됨(서버 저장 안 함).
   const [servingOverrides, setServingOverrides] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!meal) return;
-    let alive = true;
-    fetchNutrition(date, mealType).then((data) => {
-      if (alive) setNutrition(data);
-    });
+    // React 공식 문서의 race condition 방지 패턴(react.dev/reference/react/useEffect, "Fetching data with Effects").
+    // 늦게 도착한 이전 요청의 응답이 새 화면을 덮어쓰지 않게 한다. state로 두면 이전 렌더의 값을 보게 돼서 동작하지 않는다.
+    let ignore = false;
+    fetchNutrition(date, mealType)
+      .then((data) => {
+        if (!ignore) setLoaded({ key, data });
+      })
+      .catch((e: unknown) => {
+        console.error(e);
+        if (!ignore) setLoaded({ key, data: null }); // data: null = 실패
+      });
     return () => {
-      alive = false;
+      ignore = true;
     };
-  }, [date, mealType, meal]);
+  }, [key, date, mealType, meal]);
+
+  const status = loaded?.key !== key ? "loading" : loaded.data === null ? "error" : "done";
+  const nutrition = status === "done" ? (loaded?.data ?? {}) : {};
 
   if (!meal || meal.dishes.length === 0) return null;
 
@@ -86,6 +104,11 @@ function MealTable({
       <h2 className="mb-2 text-base font-bold text-gray-800">
         {icon} {title}
       </h2>
+      {status === "loading" && <p className="mb-2 text-xs text-gray-400">영양정보 불러오는 중…</p>}
+      {status === "error" && <p className="mb-2 text-xs text-red-500">영양정보를 불러오지 못했어요.</p>}
+      {status === "done" && Object.keys(nutrition).length === 0 && (
+        <p className="mb-2 text-xs text-gray-400">아직 계산된 영양정보가 없어요. (매일 새벽 5시에 계산돼요)</p>
+      )}
       <div className="overflow-x-auto rounded-lg border border-gray-200">
         <table className="w-full min-w-[560px] border-collapse text-sm">
           <thead>
@@ -98,11 +121,13 @@ function MealTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
+            {rows.map((r, i) => {
               const excluded = !!r.excludedReason;
               const valCls = excluded ? "text-gray-400 line-through" : "";
               return (
-                <tr key={r.name} className="border-b border-gray-100 last:border-0">
+                // 메뉴 데이터엔 id가 없고 같은 끼니에 같은 이름이 두 번 나올 수도 있어서
+                // 순서+이름으로 key를 만든다(한 끼니의 메뉴 순서는 바뀌지 않음).
+                <tr key={`${i}-${r.name}`} className="border-b border-gray-100 last:border-0">
                   <td className={`px-3 py-2 ${r.isMain ? "font-semibold text-gray-900" : "text-gray-700"}`}>
                     {r.name}
                   </td>
@@ -116,6 +141,7 @@ function MealTable({
                           value={r.serving_g}
                           disabled={excluded}
                           onChange={(e) => {
+                            if (e.target.value === "") return; // 칸을 비우는 중엔 0g으로 바꾸지 않음
                             const next = Number(e.target.value);
                             if (!Number.isFinite(next) || next < 0) return;
                             setServingOverrides((prev) => ({ ...prev, [r.name]: next }));
@@ -137,7 +163,7 @@ function MealTable({
                     {excluded ? (
                       <span className="text-gray-400">🔁 {r.excludedReason}</span>
                     ) : (
-                      <SourceBadge n={r as DishNutrition} />
+                      <SourceBadge n={hasNutrition(r) ? r : undefined} />
                     )}
                   </td>
                 </tr>
@@ -164,22 +190,29 @@ function MealTable({
 export default function NutritionPage() {
   const { date } = useParams<{ date: string }>();
   const [day, setDay] = useState<Day | null | undefined>(undefined);
+  // 화면 상태 3가지를 하나로 표현:
+  //   undefined = 아직 받는 중 → "불러오는 중…"
+  //   null      = 받았는데 그 날짜가 없음 → "메뉴를 찾을 수 없어요"
+  //   Day 객체  = 찾음 → 표 그리기
+
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!date) return;
-    let alive = true;
+    let ignore = false; // MealTable과 같은 공식 race condition 방지 패턴
     fetchCurrentWeek()
       .then((menu: WeeklyMenu | null) => {
-        if (!alive) return;
+        if (ignore) return;
         setDay(menu?.days.find((d) => d.date === date) ?? null);
       })
+      // 일주일 중 그 날짜만 골라서 day에 넣음 → 화면이 다시 그려짐
       .catch((e: unknown) => {
-        if (alive) setError(e instanceof Error ? e.message : "알 수 없는 오류");
+        if (!ignore) setError(e instanceof Error ? e.message : "알 수 없는 오류");
       });
     return () => {
-      alive = false;
+      ignore = true;
     };
+    // 정리 함수: 페이지를 떠나거나 date가 바뀌면 이전 요청의 응답은 무시
   }, [date]);
 
   return (

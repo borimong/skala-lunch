@@ -29,6 +29,8 @@ export async function fetchNutrition(
   mealType: "lunch" | "dinner",
 ): Promise<Record<string, DishNutrition>> {
   const res = await fetch(`/api/nutrition?date=${date}&mealType=${mealType}`);
-  if (!res.ok) return {};
+  if (!res.ok) {
+    throw new Error(`영양정보를 불러오지 못했어요 (${res.status})`);
+  }
   return (await res.json()) as Record<string, DishNutrition>;
 }

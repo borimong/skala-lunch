@@ -22,10 +22,11 @@ import {
 import { openApiSpec } from "./openapi";
 import { notifyToday } from "./slack";
 import { buildTodayResponse, todayKST } from "./today";
-import { collectMeals, ensureNutrition } from "./nutrition";
+import { collectMeals, ensureNutrition, getMealNutrition, runNutritionCron } from "./nutrition";
 import { innovalleyWeekSchema } from "../shared/innovalley";
 
 const SKALA_NOTIFY_CRON = "0 23 * * *";
+const NUTRITION_CRON = "0 20 * * *";
 
 export default {
   async fetch(request, env): Promise<Response> {
@@ -91,7 +92,7 @@ export default {
       }
 
       // 공개: 특정 날짜+끼니에 캐시된 요리별 영양정보(요리명 -> 탄단지/칼로리).
-      // 프론트(DishList.tsx)가 화면에 그릴 때 이걸 받아서 이름으로 찾아 씀.
+      // 프론트(NutritionPage.tsx)가 화면에 그릴 때 이걸 받아서 이름으로 찾아 씀.
       // date/mealType 둘 다 필수 — 같은 요리 이름이라도 끼니마다 재보정된
       // 값이 다를 수 있어서(worker/nutrition.ts의 (date,meal_type,food_name)
       // 복합키 캐시 참고) 통째로 다 주지 않고 정확히 그 끼니 것만 준다.
@@ -110,40 +111,10 @@ export default {
             ),
           );
         }
-        const rows = await env.DB.prepare(
-          "SELECT food_name, serving_g, carb_g, protein_g, fat_g, kcal, source, reliability, outlier, excluded_reason FROM dish_nutrition WHERE date = ? AND meal_type = ?",
-        )
-          .bind(date, mealType)
-          .all<{
-            food_name: string;
-            serving_g: number;
-            carb_g: number;
-            protein_g: number;
-            fat_g: number;
-            kcal: number;
-            source: string;
-            reliability: string;
-            outlier: number;
-            excluded_reason: string | null;
-          }>();
-        const byName: Record<string, unknown> = {};
-        for (const row of rows.results ?? []) {
-          byName[row.food_name] = {
-            serving_g: row.serving_g,
-            carb_g: row.carb_g,
-            protein_g: row.protein_g,
-            fat_g: row.fat_g,
-            kcal: row.kcal,
-            source: row.source,
-            reliability: row.reliability,
-            outlier: !!row.outlier,
-            excludedReason: row.excluded_reason ?? undefined,
-          };
-        }
-        return withCors(Response.json(byName));
+        return withCors(Response.json(await getMealNutrition(env.DB, date, mealType)));
       }
 
-      // 관리자: 이 끼니를 계산할 때 GPT/DB랑 어떤 판단을 주고받았는지 원본 그대로.
+      // 관리자: 이 끼니를 계산할 때 Gemini/DB랑 어떤 판단을 주고받았는지 원본 그대로.
       // "쌀밥이 30g에 95kcal면 이상한데 DB에서 뭘로 매칭했는지 보고 싶다" 같은
       // 확인용 — 일반 사용자용이 아니라서 관리자 인증을 요구한다.
       if (pathname === "/api/nutrition/trace" && method === "GET") {
@@ -245,10 +216,10 @@ export default {
         // 발행 직후 딱 한 번, payload에 담긴 모든 날짜의 영양정보를 계산해서 D1에 캐시.
         // 주의: parsed.data.days에 여러 날이 들어있으면 그 전부를 처리함 — 하루만
         // 테스트하고 싶으면 호출 전에 payload.menu.days를 그 하루로 잘라서 보낼 것
-        // (안 그러면 Gemini 무료 쿼터를 순식간에 다 씀, 인수인계.md "알려진 문제" 참고).
+        // (안 그러면 Gemini 무료 쿼터를 순식간에 다 씀).
         // GEMINI_NUTRITION_API_KEY는 사진→메뉴 추출용 GEMINI_API_KEY(김현수님 명의)와
         // 별개 키 — 그분 무료 할당량을 갉아먹지 않게 사용자 본인 명의 키를 씀.
-        // 실패해도 발행 자체는 이미 끝났으니 막지 않고 로그만 남김(다음 발행 때 재시도).
+        // 실패해도 발행 자체는 이미 끝났으니 막지 않고 로그만 남김(다음 발행이나 매일 새벽 영양정보 크론 때 다시 계산됨).
         if (env.GEMINI_NUTRITION_API_KEY) {
           const meals = collectMeals(parsed.data.days); // WeeklyMenu -> 끼니 단위 배열로 평탄화
           try {
@@ -390,6 +361,8 @@ export default {
   async scheduled(controller, env, ctx): Promise<void> {
     if (controller.cron === SKALA_NOTIFY_CRON) {
       ctx.waitUntil(notifyToday(env));
+    } else if (controller.cron === NUTRITION_CRON) {
+      ctx.waitUntil(runNutritionCron(env));
     } else {
       ctx.waitUntil(runInnovalleyCron(env));
     }
