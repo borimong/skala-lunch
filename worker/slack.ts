@@ -1,20 +1,33 @@
 import type { Day, Meal } from "../shared/menu";
 import { mondayOf } from "../shared/menu";
+import { lunchScheduleFor } from "../shared/lunchSchedule";
 import { getPublishedWeek } from "./menus";
 
-type SlackPayload = { text: string; blocks: Record<string, unknown>[] };
+export type SlackPayload = { text: string; blocks: Record<string, unknown>[] };
 type NotifyResult = { sent: boolean; reason?: string; payload?: SlackPayload };
 
-// 요리명에 '*'가 들어있으면(예: "샐러드*드레싱*토핑") Slack의 볼드 마크다운(*텍스트*)과
-// 충돌해서 렌더링이 깨지므로, 표시용으로만 가운뎃점으로 바꿔치기한다.
-function escapeDishName(name: string): string {
-  return name.replace(/\*/g, "·");
+// 슬랙 mrkdwn은 백슬래시 이스케이프(\*)를 지원하지 않는다.
+// 메뉴명 안의 '*'(예: "새우까스*스리라차마요소스")가 볼드 구분자 '*...*'와
+// 충돌해 볼드가 깨지므로 '&'로 치환한다.
+// '&','<','>'는 슬랙 제어문자라 HTML 엔티티로 이스케이프해야 화면에 문자
+// 그대로(예: '&') 렌더된다. '*'→'&' 치환을 먼저 한 뒤 이스케이프하므로,
+// 새로 넣은 '&'도 '&amp;'가 되어 '&'로 표시된다.
+export function escapeMrkdwn(text: string): string {
+  return text
+    .replace(/\*/g, "&")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
-function formatMeal(meal?: Meal): string {
+export function formatMeal(meal?: Meal): string {
   if (!meal || meal.dishes.length === 0) return "";
-  const mains = meal.dishes.filter((d) => d.isMain).map((d) => `*${escapeDishName(d.name)}*`);
-  const sides = meal.dishes.filter((d) => !d.isMain).map((d) => escapeDishName(d.name));
+  const mains = meal.dishes
+    .filter((d) => d.isMain)
+    .map((d) => `*${escapeMrkdwn(d.name)}*`);
+  const sides = meal.dishes
+    .filter((d) => !d.isMain)
+    .map((d) => escapeMrkdwn(d.name));
   return [...mains, ...sides].join(" · ");
 }
 
@@ -44,6 +57,19 @@ export function buildPayload(day: Day, publicUrl: string): SlackPayload {
     blocks.push({
       type: "section",
       text: { type: "mrkdwn", text: `*🍲 석식*\n${dinner}` },
+    });
+  }
+
+  const schedule = lunchScheduleFor(day.date);
+  if (schedule && lunch) {
+    const slots = schedule.map(
+      (s) => `${s.time} ${s.classes.map((c) => `${c}반`).join(", ")}`,
+    );
+    blocks.push({
+      type: "context",
+      elements: [
+        { type: "mrkdwn", text: `⏰ 점심 순서  ${slots.join("  ·  ")}` },
+      ],
     });
   }
 
@@ -105,17 +131,21 @@ export async function notifyToday(
     };
   }
 
-  const res = await fetch(env.SLACK_WEBHOOK_URL, {
+  const error = await postToSlack(env.SLACK_WEBHOOK_URL, payload);
+  return error ? { sent: false, reason: error } : { sent: true };
+}
+
+// 웹훅으로 메시지를 보낸다. 성공하면 null, 실패하면 사유 문자열.
+export async function postToSlack(
+  webhookUrl: string,
+  payload: SlackPayload | { text: string },
+): Promise<string | null> {
+  const res = await fetch(webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const body = await res.text();
-    return {
-      sent: false,
-      reason: `슬랙 전송 실패 (${res.status}): ${body.slice(0, 200)}`,
-    };
-  }
-  return { sent: true };
+  if (res.ok) return null;
+  const body = await res.text();
+  return `슬랙 전송 실패 (${res.status}): ${body.slice(0, 200)}`;
 }

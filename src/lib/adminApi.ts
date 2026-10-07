@@ -40,27 +40,46 @@ export async function extractMenuFromImage(
   return { menu: data.menu, imageKey: data.imageKey ?? "" };
 }
 
-export async function fetchPendingDrafts(): Promise<WeeklyMenu[]> {
+export interface PendingDraft {
+  menu: WeeklyMenu;
+  reasons: string[];
+  createdAt?: string;
+}
+
+export async function fetchPendingDrafts(): Promise<PendingDraft[]> {
   const res = await fetch("/api/menus/pending", { headers: authHeader() });
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(data.error ?? `목록을 불러오지 못했어요 (${res.status})`);
   }
-  const data = (await res.json()) as { drafts?: WeeklyMenu[] };
+  const data = (await res.json()) as { drafts?: PendingDraft[] };
   return data.drafts ?? [];
 }
 
 export async function publishMenu(
   menu: WeeklyMenu,
   imageKey?: string,
+  dismissDraft?: string,
 ): Promise<void> {
   const res = await fetch("/api/menus", {
     method: "POST",
     headers: { ...authHeader(), "Content-Type": "application/json" },
-    body: JSON.stringify({ menu, imageKey }),
+    body: JSON.stringify({ menu, imageKey, dismissDraft }),
   });
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(data.error ?? `발행에 실패했어요 (${res.status})`);
+  }
+}
+
+// 보류 초안 무시(삭제)
+export async function dismissDraft(weekStart: string): Promise<void> {
+  const res = await fetch(`/api/menus/pending/${weekStart}`, {
+    method: "DELETE",
+    headers: authHeader(),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? `삭제에 실패했어요 (${res.status})`);
   }
 }

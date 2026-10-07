@@ -1,9 +1,18 @@
 import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import type { Day, Meal, WeeklyMenu } from "../../shared/menu";
+import {
+  type Day,
+  type Meal,
+  type WeeklyMenu,
+  shiftMenuToWeekStart,
+} from "../../shared/menu";
 import { publishMenu } from "../lib/adminApi";
 
-type ReviewState = { menu: WeeklyMenu; imageKey?: string };
+type ReviewState = {
+  menu: WeeklyMenu;
+  imageKey?: string;
+  originalWeekStart?: string; // 보류 초안에서 왔다면 발행 후 정리할 원본 키
+};
 
 export default function AdminReviewPage() {
   const location = useLocation();
@@ -15,6 +24,9 @@ export default function AdminReviewPage() {
   const [done, setDone] = useState(false);
 
   if (!menu) return <Navigate to="/admin" replace />;
+
+  const setWeekStart = (newStart: string) =>
+    setMenu((m) => (m ? shiftMenuToWeekStart(m, newStart) : m));
 
   const updateDay = (i: number, patch: Partial<Day>) =>
     setMenu((m) =>
@@ -31,7 +43,7 @@ export default function AdminReviewPage() {
     setBusy(true);
     setError(null);
     try {
-      await publishMenu(menu, state?.imageKey);
+      await publishMenu(menu, state?.imageKey, state?.originalWeekStart);
       setDone(true);
       setTimeout(() => navigate("/"), 800);
     } catch (err) {
@@ -46,9 +58,17 @@ export default function AdminReviewPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div>
             <h1 className="text-lg font-bold text-gray-900">추출 결과 검수</h1>
-            <p className="text-xs text-gray-500">
-              {menu.weekStart} ~ {menu.weekEnd} · 확인하고 고친 뒤 발행하세요
-            </p>
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-gray-500">
+              <label htmlFor="weekStart">주 시작일</label>
+              <input
+                id="weekStart"
+                type="date"
+                value={menu.weekStart}
+                onChange={(e) => e.target.value && setWeekStart(e.target.value)}
+                className="rounded border border-gray-200 px-1.5 py-0.5"
+              />
+              <span>~ {menu.weekEnd} · 날짜를 바꾸면 요일·각 날짜가 함께 이동해요</span>
+            </div>
           </div>
           <button
             onClick={publish}

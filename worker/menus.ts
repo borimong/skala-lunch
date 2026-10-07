@@ -53,33 +53,65 @@ export async function saveWeek(
   }
 }
 
+export interface PendingDraft {
+  menu: WeeklyMenu;
+  reasons: string[]; // 보류 사유(검증 하드에러 또는 AI 교차검증 불일치)
+  createdAt: string;
+}
+
 // 자동 검증에서 이상이 감지된 주를 "보류(draft)"로 저장한다(관리자 검토 대기).
-// 이미 published 된 주는 절대 덮어쓰지 않는다(끝의 WHERE 가드) — 수동 발행본 보호.
+// 발행본(weekly_menus)과 분리된 pending_drafts에 담기므로, 파싱된 주가 이미 발행된 주와
+// 겹쳐도 초안이 사라지지 않는다. 같은 주가 다시 들어오면 최신 내용으로 덮어쓴다.
 export async function saveDraft(
   db: D1Database,
   menu: WeeklyMenu,
+  reasons: string[] = [],
 ): Promise<void> {
   await db
     .prepare(
-      `INSERT INTO weekly_menus (week_start, data, status, updated_at)
-       VALUES (?, ?, 'draft', datetime('now'))
+      `INSERT INTO pending_drafts (week_start, data, reasons, created_at)
+       VALUES (?, ?, ?, datetime('now'))
        ON CONFLICT(week_start) DO UPDATE SET
          data = excluded.data,
-         updated_at = datetime('now')
-       WHERE weekly_menus.status = 'draft'`,
+         reasons = excluded.reasons,
+         created_at = datetime('now')`,
     )
-    .bind(menu.weekStart, JSON.stringify(menu))
+    .bind(menu.weekStart, JSON.stringify(menu), JSON.stringify(reasons))
     .run();
 }
 
-// 검토 대기 중인 보류 주 목록(최신 주부터).
-export async function getPendingDrafts(db: D1Database): Promise<WeeklyMenu[]> {
+function parseReasons(raw: string): string[] {
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+// 검토 대기 중인 보류 초안 목록(최신 주부터). 각 항목에 보류 사유를 함께 담는다.
+export async function getPendingDrafts(db: D1Database): Promise<PendingDraft[]> {
   const rows = await db
     .prepare(
-      "SELECT data FROM weekly_menus WHERE status = 'draft' ORDER BY week_start DESC",
+      "SELECT data, reasons, created_at FROM pending_drafts ORDER BY week_start DESC",
     )
-    .all<{ data: string }>();
-  return (rows.results ?? []).map((r) => JSON.parse(r.data) as WeeklyMenu);
+    .all<{ data: string; reasons: string; created_at: string }>();
+  return (rows.results ?? []).map((r) => ({
+    menu: JSON.parse(r.data) as WeeklyMenu,
+    reasons: parseReasons(r.reasons),
+    createdAt: r.created_at,
+  }));
+}
+
+// 보류 초안 삭제(발행 완료 또는 관리자가 "무시"할 때).
+export async function deletePendingDraft(
+  db: D1Database,
+  weekStart: string,
+): Promise<void> {
+  await db
+    .prepare("DELETE FROM pending_drafts WHERE week_start = ?")
+    .bind(weekStart)
+    .run();
 }
 
 // 상태와 무관하게 특정 주를 조회(발행 여부 확인·검토 화면 로드용).
