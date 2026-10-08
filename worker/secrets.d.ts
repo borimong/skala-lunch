@@ -8,4 +8,8 @@ interface Env {
   SLACK_WEBHOOK_URL: string;
   SLACK_WEBHOOK_URL_INNOVALLEY: string;
   ADMIN_SLACK_WEBHOOK_URL: string;
+  // 영양정보(worker/nutrition.ts) 전용 Gemini 키. 메뉴 추출용 GEMINI_API_KEY와 할당량을 나누려고 별도 키를 쓴다.
+  GEMINI_NUTRITION_API_KEY?: string;
+  // 식약처 식품영양성분DB(worker/nutritionDb.ts) 조회용 data.go.kr 인증키.
+  DATA_GO_KR_API_KEY?: string;
 }

@@ -1,5 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import HomePage from "./pages/HomePage";
+import NutritionPage from "./pages/NutritionPage";
 import AdminUploadPage from "./pages/AdminUploadPage";
 import AdminReviewPage from "./pages/AdminReviewPage";
 import AdminPendingPage from "./pages/AdminPendingPage";
@@ -9,6 +10,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
+      <Route path="/nutrition/:date" element={<NutritionPage />} />
       <Route
         path="/admin"
         element={
