@@ -1,7 +1,7 @@
 import type { WeeklyMenu } from "../../shared/menu";
 
-export async function fetchCurrentWeek(): Promise<WeeklyMenu | null> {
-  const res = await fetch("/api/menus/current");
+export async function fetchCurrentWeek(signal?: AbortSignal): Promise<WeeklyMenu | null> {
+  const res = await fetch("/api/menus/current", { signal });
   if (res.status === 404) return null;
   if (!res.ok) {
     throw new Error(`식단표를 불러오지 못했어요 (${res.status})`);
@@ -27,8 +27,9 @@ export type DishNutrition = {
 export async function fetchNutrition(
   date: string,
   mealType: "lunch" | "dinner",
+  signal?: AbortSignal,
 ): Promise<Record<string, DishNutrition>> {
-  const res = await fetch(`/api/nutrition?date=${date}&mealType=${mealType}`);
+  const res = await fetch(`/api/nutrition?date=${date}&mealType=${mealType}`, { signal });
   if (!res.ok) {
     throw new Error(`영양정보를 불러오지 못했어요 (${res.status})`);
   }

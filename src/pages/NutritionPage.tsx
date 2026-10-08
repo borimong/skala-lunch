@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import type { Day, Meal, WeeklyMenu } from "../../shared/menu";
+import type { Day, Meal } from "../../shared/menu";
 import { fetchCurrentWeek, fetchNutrition } from "../lib/api";
 import type { DishNutrition } from "../lib/api";
 
@@ -70,20 +70,22 @@ function MealTable({
 
   useEffect(() => {
     if (!meal) return;
-    // React 공식 문서의 race condition 방지 패턴(react.dev/reference/react/useEffect, "Fetching data with Effects").
-    // 늦게 도착한 이전 요청의 응답이 새 화면을 덮어쓰지 않게 한다. state로 두면 이전 렌더의 값을 보게 돼서 동작하지 않는다.
-    let ignore = false;
-    fetchNutrition(date, mealType)
-      .then((data) => {
-        if (!ignore) setLoaded({ key, data });
-      })
-      .catch((e: unknown) => {
+    // 날짜·끼니가 바뀌거나 화면을 떠나면 abort()로 이전 요청을 취소한다.
+    // 응답이 이미 도착한 뒤일 수도 있어서 await 직후에 signal.aborted를 한 번 더 확인한다.
+    const controller = new AbortController();
+    const load = async () => {
+      try {
+        const data = await fetchNutrition(date, mealType, controller.signal);
+        if (controller.signal.aborted) return;
+        setLoaded({ key, data });
+      } catch (e) {
+        if (controller.signal.aborted) return;
         console.error(e);
-        if (!ignore) setLoaded({ key, data: null }); // data: null = 실패
-      });
-    return () => {
-      ignore = true;
+        setLoaded({ key, data: null }); // data: null = 실패
+      }
     };
+    load();
+    return () => controller.abort();
   }, [key, date, mealType, meal]);
 
   const status = loaded?.key !== key ? "loading" : loaded.data === null ? "error" : "done";
@@ -199,20 +201,21 @@ export default function NutritionPage() {
 
   useEffect(() => {
     if (!date) return;
-    let ignore = false; // MealTable과 같은 공식 race condition 방지 패턴
-    fetchCurrentWeek()
-      .then((menu: WeeklyMenu | null) => {
-        if (ignore) return;
+    const controller = new AbortController(); // MealTable과 같은 방식
+    const load = async () => {
+      try {
+        const menu = await fetchCurrentWeek(controller.signal);
+        if (controller.signal.aborted) return;
         setDay(menu?.days.find((d) => d.date === date) ?? null);
-      })
-      // 일주일 중 그 날짜만 골라서 day에 넣음 → 화면이 다시 그려짐
-      .catch((e: unknown) => {
-        if (!ignore) setError(e instanceof Error ? e.message : "알 수 없는 오류");
-      });
-    return () => {
-      ignore = true;
+        // 일주일 중 그 날짜만 골라서 day에 넣음 → 화면이 다시 그려짐
+      } catch (e) {
+        if (controller.signal.aborted) return;
+        setError(e instanceof Error ? e.message : "알 수 없는 오류");
+      }
     };
-    // 정리 함수: 페이지를 떠나거나 date가 바뀌면 이전 요청의 응답은 무시
+    load();
+    return () => controller.abort();
+    // 정리 함수: 페이지를 떠나거나 date가 바뀌면 진행 중인 요청 취소
   }, [date]);
 
   return (
