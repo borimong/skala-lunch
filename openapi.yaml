@@ -1,6 +1,6 @@
 # SKALA 식단 API — OpenAPI 3.1 스펙
-# 라이브 문서: https://skala-lunch.ewkimhyunsu11.workers.dev/api/docs
-# 라이브 스펙:  https://skala-lunch.ewkimhyunsu11.workers.dev/api/openapi.json
+# 라이브 문서: https://lunch.mockaptilab.com/api/docs
+# 라이브 스펙:  https://lunch.mockaptilab.com/api/openapi.json
 # (워커가 서빙하는 스펙은 worker/openapi.ts 가 단일 원천이며, 이 파일은 사람이 읽기 좋은 사본입니다.)
 openapi: 3.1.0
 info:
@@ -13,7 +13,7 @@ info:
     - 날짜는 모두 `YYYY-MM-DD`(KST 기준). 주(week)는 월요일 시작.
     - 오늘 하루치만 필요하면 `/api/today`, 주간 전체는 `/api/menus/current` 를 쓰세요.
 servers:
-  - url: https://skala-lunch.ewkimhyunsu11.workers.dev
+  - url: https://lunch.mockaptilab.com
 paths:
   /api/today:
     get:

@@ -41,11 +41,11 @@ function sectionText(
 }
 
 describe("buildPayload — 슬랙 context 링크", () => {
-  const payload = buildPayload(day, "https://skala-lunch.example/");
+  const payload = buildPayload(day, "https://lunch.example/");
   const text = contextText(payload);
 
   it("전체 식단표 보기 링크가 있다", () => {
-    expect(text).toContain("<https://skala-lunch.example/|전체 식단표 보기>");
+    expect(text).toContain("<https://lunch.example/|전체 식단표 보기>");
   });
 
   it("사내카페 주문하기 링크가 옆에 추가된다", () => {

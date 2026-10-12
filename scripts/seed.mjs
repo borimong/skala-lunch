@@ -1,5 +1,5 @@
 // 사진(2026-07-13 ~ 07-17) 주간 메뉴를 seed.sql 로 생성.
-// 적용: node scripts/seed.mjs && wrangler d1 execute skala-lunch --local --file seed.sql
+// 적용: node scripts/seed.mjs && wrangler d1 execute DB --local --file seed.sql
 import { writeFileSync } from "node:fs";
 
 const menu = {

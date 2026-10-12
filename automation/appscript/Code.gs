@@ -6,7 +6,7 @@
  * 파싱·검증·저장은 전부 Worker가 담당한다(이 스크립트는 파일을 실어 나르기만 함).
  *
  * ── 스크립트 속성(프로젝트 설정 > 스크립트 속성)에 넣을 값 ──
- *   WORKER_URL    예) https://skala-lunch.ewkimhyunsu11.workers.dev
+ *   WORKER_URL    예) https://lunch.mockaptilab.com
  *   INGEST_TOKEN  Worker의 INGEST_TOKEN 시크릿과 "동일한" 값
  *   SENDER        sumany76@whoneed.co.kr
  *   NOTIFY_EMAIL  (선택) 알림 받을 주소. 미설정 시 이 스크립트 실행 계정.

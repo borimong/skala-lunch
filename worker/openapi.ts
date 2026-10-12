@@ -12,7 +12,7 @@ export const openApiSpec = {
       "- 날짜는 모두 `YYYY-MM-DD`(KST 기준). 주(week)는 월요일 시작.\n" +
       "- 오늘 하루치만 필요하면 `/api/today`, 주간 전체는 `/api/menus/current` 를 쓰세요.",
   },
-  servers: [{ url: "https://skala-lunch.ewkimhyunsu11.workers.dev" }],
+  servers: [{ url: "https://lunch.mockaptilab.com" }],
   paths: {
     "/api/today": {
       get: {

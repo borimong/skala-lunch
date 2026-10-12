@@ -20,7 +20,7 @@
 4. **스크립트 속성 등록**: 프로젝트 설정 → 스크립트 속성 → 아래 3~4개 추가.
    | 키 | 값 |
    |----|----|
-   | `WORKER_URL` | `https://skala-lunch.ewkimhyunsu11.workers.dev` |
+   | `WORKER_URL` | `https://lunch.mockaptilab.com` |
    | `INGEST_TOKEN` | Worker에 넣을 `INGEST_TOKEN` 시크릿과 **동일한 값** |
    | `SENDER` | `sumany76@whoneed.co.kr` |
    | `NOTIFY_EMAIL` | (선택) 알림 받을 주소. 미설정 시 실행 계정 |

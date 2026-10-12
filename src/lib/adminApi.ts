@@ -1,6 +1,6 @@
 import type { WeeklyMenu } from "../../shared/menu";
 
-const TOKEN_KEY = "skala-admin-token";
+const TOKEN_KEY = "lunch-admin-token";
 
 export const getAdminToken = (): string =>
   localStorage.getItem(TOKEN_KEY) ?? "";

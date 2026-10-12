@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "skala-lunch",
+  "name": "lunch",
   "account_id": "1273d2c690baee6e98953b45fa6e813b",
   "main": "worker/index.ts",
   "compatibility_date": "2026-07-16",
@@ -20,7 +20,7 @@
   ],
   "vars": {
     "GEMINI_MODEL": "gemini-3.5-flash",
-    "PUBLIC_URL": "https://skala-lunch.ewkimhyunsu11.workers.dev",
+    "PUBLIC_URL": "https://lunch.mockaptilab.com",
   },
   // 0 23 * * *: SKALA 오늘의 메뉴(08:00 KST)
   // */20 23,0-3 * * *: 이노밸리 수집/발송(08:00~12:40 KST, 카카오 채널이 월요일 오전에 올라와서 여러 번 확인)
