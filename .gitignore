@@ -7,3 +7,10 @@ dist
 logs
 *.log
 seed.sql
+# 🌟 팀 프로젝트 PR을 위해 추가 권장
+.claude/
+.vscode/
+.idea/
+.env*
+*설명.md
+*인수인계*.md

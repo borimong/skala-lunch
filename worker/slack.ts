@@ -79,6 +79,10 @@ export function buildPayload(day: Day, publicUrl: string): SlackPayload {
   context.push(
     "<https://skalacafe.netlify.app/|사내카페 주문하기(by 5반 김태관님)>",
   );
+  // 끼니별 영양정보 상세페이지 링크. PUBLIC_URL 끝에 슬래시가 있어도/없어도
+  // 안전하게 이어붙이려고 잘라내고 다시 붙임.
+  const nutritionUrl = `${publicUrl.replace(/\/$/, "")}/nutrition/${day.date}`;
+  context.push(`<${nutritionUrl}|칼로리/영양정보 자세히 보기(by 5반 유길선님)>`);
   blocks.push({
     type: "context",
     elements: [{ type: "mrkdwn", text: context.join("  ·  ") }],

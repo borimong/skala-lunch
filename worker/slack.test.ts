@@ -60,6 +60,12 @@ describe("buildPayload — 슬랙 context 링크", () => {
     expect(idxMenu).toBeGreaterThanOrEqual(0);
     expect(idxCafe).toBeGreaterThan(idxMenu); // 식단표 링크 다음(옆)에
   });
+
+  it("영양정보 상세페이지 링크가 날짜와 함께 추가된다", () => {
+    expect(text).toContain(
+      "<https://skala-lunch.example/nutrition/2026-07-27|칼로리/영양정보 자세히 보기(by 5반 유길선님)>",
+    );
+  });
 });
 
 describe("buildPayload — 메뉴명 '*' 볼드 깨짐 방지", () => {
