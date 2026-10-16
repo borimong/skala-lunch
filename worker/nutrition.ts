@@ -7,7 +7,7 @@ import { getLatestWeek } from "./menus";
 import { lookupCached, type DbLookupResult } from "./nutritionDb";
 
 export type Reliability = "high" | "medium" | "low";
-export type Source = "food_safety_db" | "llm_estimate";
+export type Source = "food_safety_db" | "llm_estimate" | "manual";
 
 export interface DishNutrition {
   serving_g: number;
@@ -20,6 +20,19 @@ export interface DishNutrition {
   outlier: boolean; // foodHeuristics로 코드가 독립 검증
   excludedReason?: string; // 다른 메뉴에 이미 포함돼 총합에서 제외된 이유
 }
+
+// 관리자가 /api/admin/nutrition-override로 직접 입력할 때 쓰는 검증 스키마.
+export const nutritionOverrideSchema = z.object({
+  dishes: z.record(
+    z.string(),
+    z.object({
+      serving_g: z.number().positive(),
+      carb_g: z.number().nonnegative(),
+      protein_g: z.number().nonnegative(),
+      fat_g: z.number().nonnegative(),
+    }),
+  ),
+});
 
 export interface DishRef {
   name: string;
@@ -36,7 +49,7 @@ function cacheKey(date: string, mealType: string, name: string): string {
   return `${date}|${mealType}|${name}`;
 }
 
-function kcalFromMacros(carb_g: number, protein_g: number, fat_g: number): number {
+export function kcalFromMacros(carb_g: number, protein_g: number, fat_g: number): number {
   return Math.round(carb_g * 4 + protein_g * 4 + fat_g * 9);
 }
 
@@ -293,7 +306,7 @@ function buildTraceMarkdown(meal: MealGroup, transcript: GeminiContent[]): strin
   return [...lines, ...body].join("\n");
 }
 
-function saveStatement(db: D1Database, date: string, mealType: string, name: string, n: DishNutrition): D1PreparedStatement {
+export function saveStatement(db: D1Database, date: string, mealType: string, name: string, n: DishNutrition): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO dish_nutrition
