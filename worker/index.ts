@@ -22,7 +22,15 @@ import {
 import { openApiSpec } from "./openapi";
 import { notifyToday } from "./slack";
 import { buildTodayResponse, todayKST } from "./today";
-import { collectMeals, ensureNutrition, getMealNutrition, runNutritionCron } from "./nutrition";
+import {
+  collectMeals,
+  ensureNutrition,
+  getMealNutrition,
+  kcalFromMacros,
+  nutritionOverrideSchema,
+  runNutritionCron,
+  saveStatement,
+} from "./nutrition";
 import { innovalleyWeekSchema } from "../shared/innovalley";
 
 const SKALA_NOTIFY_CRON = "0 23 * * *";
@@ -213,13 +221,7 @@ export default {
         }
         await saveWeek(env.DB, parsed.data, payload.imageKey);
 
-        // 발행 직후 딱 한 번, payload에 담긴 모든 날짜의 영양정보를 계산해서 D1에 캐시.
-        // 주의: parsed.data.days에 여러 날이 들어있으면 그 전부를 처리함 — 하루만
-        // 테스트하고 싶으면 호출 전에 payload.menu.days를 그 하루로 잘라서 보낼 것
-        // (안 그러면 Gemini 무료 쿼터를 순식간에 다 씀).
-        // GEMINI_NUTRITION_API_KEY는 사진→메뉴 추출용 GEMINI_API_KEY(김현수님 명의)와
-        // 별개 키 — 그분 무료 할당량을 갉아먹지 않게 사용자 본인 명의 키를 씀.
-        // 실패해도 발행 자체는 이미 끝났으니 막지 않고 로그만 남김(다음 발행이나 매일 새벽 영양정보 크론 때 다시 계산됨).
+        // 발행 직후 영양정보 계산(실패해도 발행은 이미 끝났으니 로그만 남기고 넘어감).
         if (env.GEMINI_NUTRITION_API_KEY) {
           const meals = collectMeals(parsed.data.days); // WeeklyMenu -> 끼니 단위 배열로 평탄화
           try {
@@ -237,6 +239,45 @@ export default {
           await deletePendingDraft(env.DB, payload.dismissDraft);
         }
         return Response.json({ ok: true });
+      }
+
+      // 관리자: 영양정보 수동 직접 입력(Gemini/식약처 API 전혀 안 거침 — 둘 다 죽었을 때 비상용)
+      if (pathname === "/api/admin/nutrition-override" && method === "POST") {
+        if (!requireAdmin(request, env)) return unauthorized();
+        const date = url.searchParams.get("date");
+        const mealType = url.searchParams.get("mealType");
+        if (
+          !date ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+          (mealType !== "lunch" && mealType !== "dinner")
+        ) {
+          return Response.json(
+            { error: "date(YYYY-MM-DD)와 mealType(lunch|dinner)가 필요해요." },
+            { status: 400 },
+          );
+        }
+        const parsed = nutritionOverrideSchema.safeParse(await request.json());
+        if (!parsed.success) {
+          return Response.json(
+            { error: "dishes 형식이 올바르지 않아요.", detail: parsed.error.issues },
+            { status: 400 },
+          );
+        }
+        const entries = Object.entries(parsed.data.dishes);
+        if (entries.length === 0) {
+          return Response.json({ error: "dishes가 비어있어요." }, { status: 400 });
+        }
+        const statements = entries.map(([name, d]) =>
+          saveStatement(env.DB, date, mealType, name, {
+            ...d,
+            kcal: kcalFromMacros(d.carb_g, d.protein_g, d.fat_g),
+            source: "manual",
+            reliability: "high",
+            outlier: false,
+          }),
+        );
+        await env.DB.batch(statements);
+        return Response.json({ ok: true, count: entries.length });
       }
 
       // 자동 인그레스: 차주 식단 엑셀(base64) 수신 → 파싱 → 검증 게이트 → 발행/보류
