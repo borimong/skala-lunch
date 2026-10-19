@@ -14,3 +14,13 @@ export function requireIngest(request: Request, env: Env): boolean {
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
   return token.length > 0 && token === env.INGEST_TOKEN;
 }
+
+// /api/admin/nutrition-override 전용 토큰. 이 라우트 하나만 열어주는
+// 최소권한 토큰이라, 관리자 전체 권한(ADMIN_TOKEN)을 몰라도 통과한다.
+// 기존 ADMIN_TOKEN으로도 여전히 통과됨(둘 중 하나면 OK).
+export function requireNutritionAdmin(request: Request, env: Env): boolean {
+  const header = request.headers.get("Authorization") ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  if (token.length === 0) return false;
+  return token === env.ADMIN_TOKEN || token === env.NUTRITION_ADMIN_TOKEN;
+}
