@@ -4,6 +4,8 @@
 interface Env {
   ADMIN_TOKEN: string;
   INGEST_TOKEN: string;
+  // /api/admin/nutrition-override 전용 최소권한 토큰(worker/auth.ts requireNutritionAdmin 참고).
+  NUTRITION_ADMIN_TOKEN?: string;
   GEMINI_API_KEY: string;
   SLACK_WEBHOOK_URL: string;
   SLACK_WEBHOOK_URL_INNOVALLEY: string;

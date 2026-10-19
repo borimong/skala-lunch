@@ -1,5 +1,5 @@
 import { mondayOf, weeklyMenuSchema } from "../shared/menu";
-import { requireAdmin, requireIngest, unauthorized } from "./auth";
+import { requireAdmin, requireIngest, requireNutritionAdmin, unauthorized } from "./auth";
 import { preflight, withCors } from "./cors";
 import { swaggerUiHtml } from "./docs";
 import { extractMenu } from "./gemini";
@@ -243,7 +243,7 @@ export default {
 
       // 관리자: 영양정보 수동 직접 입력(Gemini/식약처 API 전혀 안 거침 — 둘 다 죽었을 때 비상용)
       if (pathname === "/api/admin/nutrition-override" && method === "POST") {
-        if (!requireAdmin(request, env)) return unauthorized();
+        if (!requireNutritionAdmin(request, env)) return unauthorized();
         const date = url.searchParams.get("date");
         const mealType = url.searchParams.get("mealType");
         if (
