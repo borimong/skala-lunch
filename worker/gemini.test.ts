@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchWithRetry } from "./gemini";
+import { buildImageRequest, fetchWithRetry } from "./gemini";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -31,5 +31,31 @@ describe("fetchWithRetry", () => {
     const res = await fetchWithRetry("https://x", {}, [0, 0]);
     expect(res.status).toBe(400);
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("buildImageRequest", () => {
+  const img = new Uint8Array([1, 2, 3]).buffer;
+
+  it("해상도를 지정하면 이미지 part에 media_resolution을 붙인다", () => {
+    const body = buildImageRequest(
+      "p",
+      img,
+      "image/png",
+      {},
+      "MEDIA_RESOLUTION_ULTRA_HIGH",
+    );
+    expect(body.contents[0].parts[1]).toMatchObject({
+      inline_data: { mime_type: "image/png" },
+      media_resolution: { level: "MEDIA_RESOLUTION_ULTRA_HIGH" },
+    });
+  });
+
+  it("지정하지 않으면 media_resolution을 보내지 않는다(모델 기본값)", () => {
+    const body = buildImageRequest("p", img, "", {});
+    expect(body.contents[0].parts[1]).not.toHaveProperty("media_resolution");
+    expect(body.contents[0].parts[1]).toMatchObject({
+      inline_data: { mime_type: "image/jpeg" },
+    });
   });
 });

@@ -102,24 +102,22 @@ export async function fetchWithRetry(
   return res;
 }
 
-/** 프롬프트와 이미지를 보내 responseSchema에 맞는 JSON을 받는다(스키마 검증은 호출측). */
-export async function generateJsonFromImage(
-  env: Env,
+// Gemini 3 계열은 기본값이 이미 HIGH(이미지당 약 1120토큰)라서, 더 촘촘히 읽히려면
+// 이미지 part에 ULTRA_HIGH(약 2240토큰)를 지정해야 한다(generationConfig로는 지정 불가).
+export type MediaResolution =
+  | "MEDIA_RESOLUTION_LOW"
+  | "MEDIA_RESOLUTION_MEDIUM"
+  | "MEDIA_RESOLUTION_HIGH"
+  | "MEDIA_RESOLUTION_ULTRA_HIGH";
+
+export function buildImageRequest(
   prompt: string,
   image: ArrayBuffer,
   mimeType: string,
   responseSchema: unknown,
-): Promise<unknown> {
-  if (!env.GEMINI_API_KEY) {
-    throw new Error(
-      "GEMINI_API_KEY가 설정되지 않았어요. .dev.vars 또는 시크릿을 확인해 주세요.",
-    );
-  }
-
-  const model = env.GEMINI_MODEL || "gemini-3.5-flash";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-
-  const body = {
+  mediaResolution?: MediaResolution,
+) {
+  return {
     contents: [
       {
         parts: [
@@ -129,6 +127,9 @@ export async function generateJsonFromImage(
               mime_type: mimeType || "image/jpeg",
               data: toBase64(image),
             },
+            ...(mediaResolution && {
+              media_resolution: { level: mediaResolution },
+            }),
           },
         ],
       },
@@ -139,6 +140,33 @@ export async function generateJsonFromImage(
       temperature: 0,
     },
   };
+}
+
+/** 프롬프트와 이미지를 보내 responseSchema에 맞는 JSON을 받는다(스키마 검증은 호출측). */
+export async function generateJsonFromImage(
+  env: Env,
+  prompt: string,
+  image: ArrayBuffer,
+  mimeType: string,
+  responseSchema: unknown,
+  { mediaResolution }: { mediaResolution?: MediaResolution } = {},
+): Promise<unknown> {
+  if (!env.GEMINI_API_KEY) {
+    throw new Error(
+      "GEMINI_API_KEY가 설정되지 않았어요. .dev.vars 또는 시크릿을 확인해 주세요.",
+    );
+  }
+
+  const model = env.GEMINI_MODEL || "gemini-3.5-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+  const body = buildImageRequest(
+    prompt,
+    image,
+    mimeType,
+    responseSchema,
+    mediaResolution,
+  );
 
   const res = await fetchWithRetry(url, {
     method: "POST",
